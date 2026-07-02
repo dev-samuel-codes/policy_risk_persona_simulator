@@ -1,65 +1,37 @@
-# 모델 호출 파일
+# LLM 공통 인터페이스
 
-from typing import Any
+from __future__ import annotations
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Literal
 
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 
-# mps는 맥북용 GPU가속 장치
-if torch.backends.mps.is_available():
-    device = "mps"
-elif torch.cuda.is_available():
-    device = "cuda"
-else:
-    device = "cpu"
+Role = Literal["system", "user", "assistant"]
 
-print("사용장치: " + device)
 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+@dataclass(frozen=True)
+class ChatMessage:
+    role: Role
+    content: str
 
-#윈도우면 cpu 또는 cuda로 변경
-model: Any = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    type=torch.float16 if device == "mps" else torch.float32,
-)
 
-model.to(device)
-model.eval()
+class BaseLLM(ABC):
+    """
+    모든 LLM 구현체가 따라야 하는 공통 인터페이스.
+    """
 
-prompt = "Give me a short introduction to large language model."
+    model_name: str
+    device: str
 
-messages = [
-    {
-        "role": "system",
-        "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
-    },
-    {
-        "role": "user",
-        "content": prompt,
-    },
-]
-
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True,
-)
-
-model_inputs = tokenizer([text], return_tensors="pt").to(device)
-
-with torch.inference_mode():
-    generated_ids = model.generate(
-        **model_inputs,
-        max_new_tokens=512,
-    )
-
-generated_ids = [
-    output_ids[len(input_ids):]
-    for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-]
-
-response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-print(response)
+    @abstractmethod
+    def chat(
+        self,
+        prompt: str,
+        system_prompt: str = "You are a helpful assistant.",
+        max_new_tokens: int = 512,
+    ) -> str:
+        """
+        사용자 프롬프트를 받아 모델 응답을 반환
+        """
+        pass
