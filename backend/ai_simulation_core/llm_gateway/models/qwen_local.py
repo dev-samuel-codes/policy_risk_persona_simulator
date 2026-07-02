@@ -1,4 +1,4 @@
-# 로컬 LLM 추론 어댑터
+# Qwen 로컬 추론 어댑터
 
 from __future__ import annotations
 
@@ -7,8 +7,17 @@ from typing import Any
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from .model import BaseLLM
 
-class QwenLocalLLM:
+
+class QwenLocalLLM(BaseLLM):
+    """
+    Qwen 로컬 LLM 추론 어댑터.
+
+    Hugging Face Qwen 모델을 로컬 환경에서 로딩,
+    chat() 인터페이스로 텍스트 응답을 생성
+    """
+
     def __init__(self, model_name: str = "Qwen/Qwen2.5-1.5B-Instruct") -> None:
         self.model_name = model_name
         self.device = self._get_device()
@@ -30,8 +39,10 @@ class QwenLocalLLM:
     def _get_device(self) -> str:
         if torch.backends.mps.is_available():
             return "mps"
+
         if torch.cuda.is_available():
             return "cuda"
+
         return "cpu"
 
     def chat(
@@ -41,8 +52,14 @@ class QwenLocalLLM:
         max_new_tokens: int = 512,
     ) -> str:
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
         ]
 
         text = self.tokenizer.apply_chat_template(
@@ -56,6 +73,11 @@ class QwenLocalLLM:
             return_tensors="pt",
         ).to(self.device)
 
+        pad_token_id = self.tokenizer.pad_token_id
+
+        if pad_token_id is None:
+            pad_token_id = self.tokenizer.eos_token_id
+
         with torch.inference_mode():
             generated_ids = self.model.generate(
                 **model_inputs,
@@ -63,7 +85,7 @@ class QwenLocalLLM:
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,
-                pad_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=pad_token_id,
             )
 
         generated_ids = [
@@ -77,24 +99,3 @@ class QwenLocalLLM:
         )[0]
 
         return response.strip()
-
-
-def main() -> None:
-    llm = QwenLocalLLM()
-
-    while True:
-        prompt = input("\n사용자> ").strip()
-
-        if prompt.lower() in {"q", "quit", "exit"}:
-            print("종료합니다.")
-            break
-
-        if not prompt:
-            continue
-
-        response = llm.chat(prompt)
-        print(f"\nQwen> {response}")
-
-
-if __name__ == "__main__":
-    main()
