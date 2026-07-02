@@ -26,7 +26,7 @@ class QwenLocalLLM(BaseLLM):
 
         self.tokenizer: Any = AutoTokenizer.from_pretrained(self.model_name)
 
-        dtype = torch.float16 if self.device in {"mps", "cuda"} else torch.float32
+        dtype = torch.float16 if self.device in {"mps", "cuda", "cpu"} else torch.float32
 
         self.model: Any = AutoModelForCausalLM.from_pretrained(
             self.model_name,
