@@ -1,60 +1,26 @@
-# Qwen 로컬 추론 어댑터
-
-from __future__ import annotations
-
 from typing import Any
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .model import BaseLLM
 
+class QwenLocalLLM:
+    def __init__(self) -> None:
+        self.model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 
-class QwenLocalLLM(BaseLLM):
-    """
-    Qwen 로컬 LLM 추론 어댑터.
-
-    Hugging Face Qwen 모델을 로컬 환경에서 로딩,
-    chat() 인터페이스로 텍스트 응답을 생성
-    """
-
-    def __init__(self, model_name: str = "Qwen/Qwen2.5-1.5B-Instruct") -> None:
-        self.model_name = model_name
-        self.device = self._get_device()
-
-        print(f"사용 장치: {self.device}")
-
-        self.tokenizer: Any = AutoTokenizer.from_pretrained(self.model_name)
-
-        dtype = torch.float16 if self.device in {"mps", "cuda", "cpu"} else torch.float32
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         self.model: Any = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            dtype=dtype,
+            torch_dtype="auto",
+            device_map="auto",
         )
 
-        self.model.to(self.device)
-        self.model.eval()
-
-    def _get_device(self) -> str:
-        if torch.backends.mps.is_available():
-            return "mps"
-
-        if torch.cuda.is_available():
-            return "cuda"
-
-        return "cpu"
-
-    def chat(
-        self,
-        prompt: str,
-        system_prompt: str = "You are a helpful assistant.",
-        max_new_tokens: int = 512,
-    ) -> str:
+    def generate(self, prompt: str) -> str:
         messages = [
             {
                 "role": "system",
-                "content": system_prompt,
+                "content": "당신은 정책 리스크와 민원 사각지대를 분석하는 AI 시뮬레이터입니다.",
             },
             {
                 "role": "user",
@@ -71,26 +37,23 @@ class QwenLocalLLM(BaseLLM):
         model_inputs = self.tokenizer(
             [text],
             return_tensors="pt",
-        ).to(self.device)
+        ).to(self.model.device)
 
-        pad_token_id = self.tokenizer.pad_token_id
-
-        if pad_token_id is None:
-            pad_token_id = self.tokenizer.eos_token_id
-
-        with torch.inference_mode():
+        with torch.no_grad():
             generated_ids = self.model.generate(
                 **model_inputs,
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=512,
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,
-                pad_token_id=pad_token_id,
             )
 
         generated_ids = [
             output_ids[len(input_ids):]
-            for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+            for input_ids, output_ids in zip(
+                model_inputs.input_ids,
+                generated_ids,
+            )
         ]
 
         response = self.tokenizer.batch_decode(
@@ -98,4 +61,4 @@ class QwenLocalLLM(BaseLLM):
             skip_special_tokens=True,
         )[0]
 
-        return response.strip()
+        return response
