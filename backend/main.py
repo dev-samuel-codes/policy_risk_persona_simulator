@@ -1,8 +1,7 @@
-from ai_simulation_core.llm_inference.llm_gateway.models.run_llm import run_qwen
-from ai_simulation_core.llm_inference.nemotron_local_inference.get_nemotron_persona import (
+from backend.ai_simulation_core.llm_inference.llm_gateway.models.run_llm import run_qwen
+from backend.ai_simulation_core.llm_inference.nemotron_local_inference.get_nemotron_persona import (
     get_persona_samples,
 )
-
 
 def build_prompt(persona: dict) -> str:
     return f"""

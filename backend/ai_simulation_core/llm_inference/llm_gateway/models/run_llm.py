@@ -1,19 +1,26 @@
-# llm 실행
+# backend/ai_simulation_core/llm_inference/llm_gateway/models/run_llm.py
 
-from typing import Any
+from backend.ai_simulation_core.llm_inference.llm_gateway.models.qwen_local import QwenLocalLLM
+
+
+_llm: QwenLocalLLM | None = None
+
+
+def get_llm() -> QwenLocalLLM:
+    """
+    로컬 LLM을 한 번만 로딩합니다.
+    main.py에서 persona마다 run_qwen을 호출해도 모델은 재로딩되지 않습니다.
+    """
+    global _llm
+
+    if _llm is None:
+        print("[LLM] Loading local Qwen model...")
+        _llm = QwenLocalLLM()
+        print("[LLM] Local Qwen model loaded.")
+
+    return _llm
+
 
 def run_qwen(prompt: str) -> str:
-    """
-    나중에 QwenLocalLLM 연결부를 여기에 넣으면 됩니다.
-    지금은 테스트용 더미 응답입니다.
-    """
-    return f"Qwen response for: {prompt}"
-
-
-def main() -> None:
-    result = run_qwen("테스트 프롬프트")
-    print(result)
-
-
-if __name__ == "__main__":
-    main()
+    llm = get_llm()
+    return llm.generate(prompt)
