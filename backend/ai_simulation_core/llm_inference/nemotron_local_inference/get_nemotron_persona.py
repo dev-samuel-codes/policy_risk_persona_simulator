@@ -23,7 +23,3 @@ def get_persona_samples(limit: int = 10) -> list[dict[str, Any]]:
 
 if __name__ == "__main__":
     samples = get_persona_samples(limit=5)
-
-    for i, sample in enumerate(samples, start=1):
-        print(f"\n===== SAMPLE {i} =====")
-        print(sample)

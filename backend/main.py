@@ -1,23 +1,27 @@
-# 백엔드 실행 파일
+from ai_simulation_core.llm_inference.llm_gateway.models.run_llm import run_qwen
+from ai_simulation_core.llm_inference.nemotron_local_inference.get_nemotron_persona import (
+    get_persona_samples,
+)
 
-from ai_simulation_core.llm_inference.llm_gateway.models import QwenLocalLLM
+
+def build_prompt(persona: dict) -> str:
+    return f"""
+다음 페르소나를 기반으로 정책 리스크를 분석하세요.
+
+페르소나:
+{persona}
+"""
 
 
 def main() -> None:
-    llm = QwenLocalLLM()
+    personas = get_persona_samples(limit=3)
 
-    while True:
-        prompt = input("\n사용자> ").strip()
+    for index, persona in enumerate(personas, start=1):
+        prompt = build_prompt(persona)
+        response = run_qwen(prompt)
 
-        if prompt.lower() in {"q", "quit", "exit"}:
-            print("종료합니다.")
-            break
-
-        if not prompt:
-            continue
-
-        response = llm.chat(prompt)
-        print(f"\nQwen> {response}")
+        print(f"\n===== PERSONA {index} RESULT =====")
+        print(response)
 
 
 if __name__ == "__main__":
