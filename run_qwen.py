@@ -1,6 +1,6 @@
 # 실행 전용 파일
 
-from backend.ai_simulation_core.llm_gateway.models import QwenLocalLLM
+from backend.ai_simulation_core.llm_inference.llm_gateway.models import QwenLocalLLM
 
 
 def main() -> None:
