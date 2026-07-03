@@ -38,7 +38,7 @@ class LLM:
         messages = [
             {
                 "role": "system", # 모델의 역할과 행동기준 설정 : content
-                "content": "당신은 정책 리스크와 민원 사각지대를 분석하는 AI 시뮬레이터입니다.",
+                "content": "당신은 한국인입니다. 항상 한국말로 답하세요.",
             },
             {
                 "role": "user",
