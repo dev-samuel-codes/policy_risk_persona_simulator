@@ -1,6 +1,6 @@
 from backend.ai_simulation_core.llm_inference.llm_gateway.models.run_llm import run_qwen
 from backend.ai_simulation_core.llm_inference.nemotron_local_inference.get_nemotron_persona import (
-    get_persona_samples,
+    get_persona,
 )
 
 def build_prompt(persona: dict) -> str:
@@ -13,7 +13,7 @@ def build_prompt(persona: dict) -> str:
 
 
 def main() -> None:
-    personas = get_persona_samples(limit=3)
+    personas = get_persona(limit=3)
 
     for index, persona in enumerate(personas, start=1):
         prompt = build_prompt(persona)
