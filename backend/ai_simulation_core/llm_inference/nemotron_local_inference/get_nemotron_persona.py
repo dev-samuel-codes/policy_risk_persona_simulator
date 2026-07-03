@@ -19,7 +19,3 @@ def get_persona_samples(limit: int = 10) -> list[dict[str, Any]]:
     )
 
     return list(islice(dataset, limit))
-
-
-if __name__ == "__main__":
-    samples = get_persona_samples(limit=5)
