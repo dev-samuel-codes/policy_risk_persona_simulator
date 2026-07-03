@@ -1,26 +1,26 @@
-# backend/ai_simulation_core/llm_inference/llm_gateway/models/run_llm.py
+# Qwen 로컬 LLM 단일 로딩 및 호출 모듈
 
-from backend.ai_simulation_core.llm_inference.llm_gateway.models.qwen_local import QwenLocalLLM
+"""
+로컬 llm을 한 번만 로딩
+"""
+
+from ai_simulation_core.llm_inference.llm_gateway.models.model import LLM
 
 
-_llm: QwenLocalLLM | None = None
+_llm: LLM | None = None # 로드된 LLM 객체를 저장해두는 전역변수 / 로드 전 처음 상태: None 
 
 
-def get_llm() -> QwenLocalLLM:
-    """
-    로컬 LLM을 한 번만 로딩합니다.
-    main.py에서 persona마다 run_qwen을 호출해도 모델은 재로딩되지 않습니다.
-    """
-    global _llm
+def get_llm() -> LLM:
+    global _llm # 함수 밖 전역변수 _llm 을 수정
 
     if _llm is None:
-        print("[LLM] Loading local Qwen model...")
-        _llm = QwenLocalLLM()
-        print("[LLM] Local Qwen model loaded.")
+        print("[LLM] 모델 가져오는 중")
+        _llm = LLM()   # 모델 로딩
+        print("[LLM] 모델 가져오기 완료")
 
     return _llm
 
 
-def run_qwen(prompt: str) -> str:
+def run_llm(prompt: str) -> str:
     llm = get_llm()
     return llm.generate(prompt)
