@@ -21,14 +21,14 @@ class LLM:
     # 클래스 초기화: LLM 객체를 만들 때 자동으로 실행
     def __init__(self) -> None:
 
-        self.model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+        self.model_name = "Qwen/Qwen3-1.7B"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         # 모델 로드
         self.model: Any = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype = "auto", # float32: 정확도 좋음, 메모리 많이 사용 / float16: 메모리 적게 사용 / bfloat16: 일부 환경에서 효율적
-            device_map = "auto",  # 애플이면 msp / 윈도우면 cpu 또는 gpu / 일단 그냥 두 개 다 auto로 ......
+            device_map = "auto",  # 애플이면 mps / 윈도우면 cpu 또는 gpu / 일단 그냥 두 개 다 auto로 ......
         )
 
     # 사용자 질문을 받아서 모델 답변을 문자열로 반환
