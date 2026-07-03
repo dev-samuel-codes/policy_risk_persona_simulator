@@ -1,6 +1,6 @@
 # backend/ai_simulation_core/llm_inference/llm_gateway/models/run_llm.py
 
-from backend.ai_simulation_core.llm_inference.llm_gateway.models.qwen_local import QwenLocalLLM
+from ai_simulation_core.llm_inference.llm_gateway.models.model import QwenLocalLLM
 
 
 _llm: QwenLocalLLM | None = None

@@ -1,37 +1,64 @@
-# LLM 공통 인터페이스
+from typing import Any
 
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Literal
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-Role = Literal["system", "user", "assistant"]
+class QwenLocalLLM:
+    def __init__(self) -> None:
+        self.model_name = "Qwen/Qwen2.5-1.5B-Instruct"
 
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-@dataclass(frozen=True)
-class ChatMessage:
-    role: Role
-    content: str
+        self.model: Any = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype="auto",
+            device_map="auto",
+        )
 
+    def generate(self, prompt: str) -> str:
+        messages = [
+            {
+                "role": "system",
+                "content": "당신은 정책 리스크와 민원 사각지대를 분석하는 AI 시뮬레이터입니다.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
 
-class BaseLLM(ABC):
-    """
-    모든 LLM 구현체가 따라야 하는 공통 인터페이스.
-    """
+        text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
 
-    model_name: str
-    device: str
+        model_inputs = self.tokenizer(
+            [text],
+            return_tensors="pt",
+        ).to(self.model.device)
 
-    @abstractmethod
-    def chat(
-        self,
-        prompt: str,
-        system_prompt: str = "You are a helpful assistant.",
-        max_new_tokens: int = 512,
-    ) -> str:
-        """
-        사용자 프롬프트를 받아 모델 응답을 반환
-        """
-        pass
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                **model_inputs,
+                max_new_tokens=512,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+            )
+
+        generated_ids = [
+            output_ids[len(input_ids):]
+            for input_ids, output_ids in zip(
+                model_inputs.input_ids,
+                generated_ids,
+            )
+        ]
+
+        response = self.tokenizer.batch_decode(
+            generated_ids,
+            skip_special_tokens=True,
+        )[0]
+
+        return response
