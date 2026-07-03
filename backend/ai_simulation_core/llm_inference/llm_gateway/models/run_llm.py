@@ -4,7 +4,7 @@
 로컬 llm을 한 번만 로딩
 """
 
-from ai_simulation_core.llm_inference.llm_gateway.models.model import LLM
+from .model import LLM
 
 
 _llm: LLM | None = None # 로드된 LLM 객체를 저장해두는 전역변수 / 로드 전 처음 상태: None 
