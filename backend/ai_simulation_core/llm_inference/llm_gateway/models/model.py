@@ -16,9 +16,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # LLM을 로컬에서 실행하기 위한 클래스
-class QwenLocalLLM:
+class LLM:
 
-    # 클래스 초기화: QwenLocalLLM 객체를 만들 때 자동으로 실행
+    # 클래스 초기화: LLM 객체를 만들 때 자동으로 실행
     def __init__(self) -> None:
 
         self.model_name = "Qwen/Qwen2.5-1.5B-Instruct"
