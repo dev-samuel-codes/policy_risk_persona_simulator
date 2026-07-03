@@ -21,6 +21,6 @@ def get_llm() -> LLM:
     return _llm
 
 
-def run_qwen(prompt: str) -> str:
+def run_llm(prompt: str) -> str:
     llm = get_llm()
     return llm.generate(prompt)
