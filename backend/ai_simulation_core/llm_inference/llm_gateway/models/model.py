@@ -18,18 +18,32 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # LLM을 로컬에서 실행하기 위한 클래스
 class LLM:
 
+    # 윈도우, 맥에서 mps, cpu, gpu 구분
+    def get_device(self) -> torch.device:
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+
+        return torch.device("cpu")
+
     # 클래스 초기화: LLM 객체를 만들 때 자동으로 실행
     def __init__(self) -> None:
 
         self.model_name = "Qwen/Qwen3-1.7B"
+        self.device = self.get_device()
+
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         # 모델 로드
         self.model: Any = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype = "auto", # float32: 정확도 좋음, 메모리 많이 사용 / float16: 메모리 적게 사용 / bfloat16: 일부 환경에서 효율적
-            device_map = "auto",  # 애플이면 mps / 윈도우면 cpu 또는 gpu / 일단 그냥 두 개 다 auto로 ......
         )
+
+        self.model.to(self.device)
+        self.model.eval()
 
     # 사용자 질문을 받아서 모델 답변을 문자열로 반환
     def generate(self, prompt: str) -> str:
@@ -58,7 +72,7 @@ class LLM:
         model_inputs = self.tokenizer(
             [text], # 문자열을 하나를 리스트로 랩핑
             return_tensors="pt",
-        ).to(self.model.device)
+        ).to(self.device)
 
         # 답변 생성
         with torch.no_grad():

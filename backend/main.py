@@ -6,7 +6,7 @@ from backend.ai_simulation_core.llm_inference.prompts.civil_servant import (
 
 
 def main() -> None:
-    personas = get_persona(limit=3, keyword="공무원")
+    personas = get_persona(limit=3, keyword="공무원", min_age=20, max_age=60)
 
     for index, persona in enumerate(personas, start=1):
         prompt = civil_servant_prompt(persona)
