@@ -26,8 +26,7 @@ TEMP_TRAIN_DIR = LOCAL_DIR / "default" / "train"
 COMPLETE_MARKER = LOCAL_DIR / ".download_complete"
 
 
-# 이미 다운로드 되어있는 지 확인:
-# marker 파일 존재 여부 / parquet 파일 존재 여부 / 각 파일 크기 > 0 인지
+# 이미 다운로드 되어있는 지 확인: marker 파일 존재 여부 / parquet 파일 존재 여부 / 각 파일 크기 > 0 인지
 def is_already_downloaded() -> bool:
     parquet_files = list(LOCAL_DIR.glob("*.parquet"))
 
@@ -40,8 +39,7 @@ def is_already_downloaded() -> bool:
     return all(file_path.stat().st_size > 0 for file_path in parquet_files)
 
 
-# Hugging Face에서 받은 default/train/*.parquet 파일을
-# backend/data/nometron_persona_korea/*.parquet 위치로 이동
+# Hugging Face에서 받은 default/train/*.parquet 파일을 backend/data/nometron_persona_korea/*.parquet 위치로 이동
 def flatten_parquet_files() -> None:
     if not TEMP_TRAIN_DIR.exists():
         raise RuntimeError(
@@ -103,13 +101,20 @@ def download_dataset() -> Path:
     return LOCAL_DIR
 
 
+def get_local_parquet_files(auto_download: bool = True) -> list[Path]:
+    if auto_download:
+        dataset_dir = download_dataset()
+    else:
+        dataset_dir = LOCAL_DIR
+
+    return sorted(dataset_dir.glob("*.parquet"))
+
+
 # 로컬 parquet 파일에서 사용할 페르소나 가져오기
 def get_persona(limit: int = 10) -> list[dict[str, Any]]:
-    download_dataset()
-
     personas: list[dict[str, Any]] = []
 
-    for parquet_file in sorted(LOCAL_DIR.glob("*.parquet")):
+    for parquet_file in get_local_parquet_files():
         dataframe = pd.read_parquet(parquet_file)
 
         for persona in dataframe.to_dict(orient="records"):
