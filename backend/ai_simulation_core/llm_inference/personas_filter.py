@@ -68,7 +68,7 @@ def row_to_persona(row: pd.Series) -> dict:
     return persona
 
 
-# 원하는 직업 키워드가 포함된 페르소나를 limit 개수만큼 가져오기
+# 공무원 키워드가 포함된 페르소나를 limit 개수만큼 가져오기
 def get_civil_servant_persona(
     limit: int = 3,
     keyword: str = "공무원",
@@ -129,4 +129,76 @@ def get_civil_servant_persona(
 
     raise ValueError(
         f"[ERROR] '{keyword}' 키워드가 포함된 페르소나를 {limit}개 찾지 못했습니다."
+    )
+
+# 공무원이 아닌 페르소나를 limit 개수만큼 가져오기
+def get_citizen_persona(
+    limit: int = 3,
+    excluded_keyword: str = "공무원",
+    min_age: int | None = None,
+    max_age: int | None = None,
+    auto_download: bool = True,
+) -> list[dict]:
+    if limit <= 0:
+        raise ValueError("[ERROR] limit은 1 이상이어야 합니다.")
+
+    parquet_files = get_local_parquet_files(auto_download=auto_download)
+
+    if not parquet_files:
+        raise FileNotFoundError(
+            "[ERROR] parquet 파일을 찾을 수 없습니다. 먼저 download_dataset()을 실행하세요."
+        )
+
+    personas = []
+
+    # 매번 같은 파일 순서만 보지 않도록 섞기
+    random.shuffle(parquet_files)
+
+    for parquet_file in parquet_files:
+        available_columns = get_available_columns(parquet_file)
+
+        if "occupation" not in available_columns:
+            continue
+
+        df = pd.read_parquet(
+            parquet_file,
+            columns=available_columns,
+        )
+
+        occupation_series = df["occupation"].fillna("").astype(str)
+
+        # 직업 정보가 비어 있지 않은 사람
+        has_occupation = occupation_series.str.strip().ne("")
+
+        # occupation에 "공무원"이 포함되어 있는지 여부
+        contains_excluded_keyword = occupation_series.str.contains(
+            excluded_keyword,
+            regex=False,
+        )
+
+        # 공무원이 아닌 사람만 선택
+        matched_df = df[
+            has_occupation & contains_excluded_keyword.eq(False)
+        ]
+
+        if min_age is not None:
+            matched_df = matched_df[matched_df["age"] >= min_age]
+
+        if max_age is not None:
+            matched_df = matched_df[matched_df["age"] <= max_age]
+
+        if matched_df.empty:
+            continue
+
+        # 같은 파일 안에서도 랜덤하게 뽑기
+        matched_df = matched_df.sample(frac=1)
+
+        for _, row in matched_df.iterrows():
+            personas.append(row_to_persona(row))
+
+            if len(personas) >= limit:
+                return personas
+
+    raise ValueError(
+        f"[ERROR] '{excluded_keyword}' 키워드가 포함되지 않은 페르소나를 {limit}개 찾지 못했습니다."
     )
