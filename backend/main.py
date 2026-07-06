@@ -6,6 +6,8 @@ from backend.ai_simulation_core.llm_inference.personas_filter import get_persona
 def build_prompt(persona: dict) -> str:
     return f"""
 다음 페르소나를 기반으로 정책 리스크를 분석하세요.
+반드시 한국어로 대답하세요.
+출력할 때 이름과 직업먼저 출력후 다음을 출력하세요
 
 페르소나:
 {persona}
