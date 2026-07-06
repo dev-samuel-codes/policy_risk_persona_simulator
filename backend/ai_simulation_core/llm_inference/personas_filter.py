@@ -122,11 +122,3 @@ def get_persona(
     raise ValueError(
         f"[ERROR] '{keyword}' 키워드가 포함된 페르소나를 {limit}개 찾지 못했습니다."
     )
-
-
-if __name__ == "__main__":
-    sample_personas = get_persona(limit=3, keyword="공무원")
-
-    for index, persona in enumerate(sample_personas, start=1):
-        print(f"\n===== PERSONA {index} =====")
-        print(persona)
