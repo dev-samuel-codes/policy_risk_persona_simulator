@@ -69,7 +69,7 @@ def row_to_persona(row: pd.Series) -> dict:
 
 
 # 원하는 직업 키워드가 포함된 페르소나를 limit 개수만큼 가져오기
-def get_persona(
+def get_civil_servant_persona(
     limit: int = 3,
     keyword: str = "공무원",
     min_age: int | None = None,

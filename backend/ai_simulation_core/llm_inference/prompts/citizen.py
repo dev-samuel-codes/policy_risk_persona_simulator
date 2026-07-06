@@ -1,6 +1,6 @@
-# 공무원 전용 프롬프트
+# 시민 전용 프롬프트
 
-def civil_servant_prompt(persona: dict) -> str:
+def citizen_prompt(persona: dict) -> str:
     persona_text = "\n".join(
         f"{key}: {value}"
         for key, value in persona.items()
