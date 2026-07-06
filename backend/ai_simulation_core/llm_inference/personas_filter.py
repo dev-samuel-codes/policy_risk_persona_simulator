@@ -72,6 +72,8 @@ def row_to_persona(row: pd.Series) -> dict:
 def get_persona(
     limit: int = 3,
     keyword: str = "공무원",
+    min_age: int | None = None,
+    max_age: int | None = None,
     auto_download: bool = True,
 ) -> list[dict]:
     if limit <= 0:
@@ -106,6 +108,12 @@ def get_persona(
             .astype(str)
             .str.contains(keyword, regex=False)
         ]
+
+        if min_age is not None:
+            matched_df = matched_df[matched_df["age"] >= min_age]
+
+        if max_age is not None:
+            matched_df = matched_df[matched_df["age"] <= max_age]
 
         if matched_df.empty:
             continue
