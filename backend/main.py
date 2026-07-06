@@ -1,27 +1,15 @@
-from backend.ai_simulation_core.llm_inference.get_nemotron_personas import get_persona
 from backend.ai_simulation_core.llm_inference.llm_gateway.models.run_llm import run_llm
-
-
-# 페르소나를 하나 받아서 LLM에게 보낼 프롬프트 문장을 생성
-def build_prompt(persona: dict) -> str:
-    return f"""
-다음 페르소나를 기반으로 정책 리스크를 분석하세요.
-
-페르소나:
-{persona}
-"""
+from backend.ai_simulation_core.llm_inference.personas_filter import get_persona
+from backend.ai_simulation_core.llm_inference.prompts.civil_servant import (
+    civil_servant_prompt,
+)
 
 
 def main() -> None:
-    # 1. 네모트론 페르소나 데이터가 없으면 다운로드하고, 있으면 스킵
-    # get_persona() 내부에서 download_dataset()을 호출함
+    personas = get_persona(limit=3, keyword="공무원")
 
-    # 2. 사용할 페르소나 가져오기
-    personas = get_persona(limit=3)
-
-    # 3. 페르소나별로 프롬프트 생성 후 LLM 실행
     for index, persona in enumerate(personas, start=1):
-        prompt = build_prompt(persona)
+        prompt = civil_servant_prompt(persona)
         response = run_llm(prompt)
 
         print(f"\n===== PERSONA {index} RESULT =====")
