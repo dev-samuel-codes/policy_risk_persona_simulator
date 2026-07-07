@@ -37,11 +37,12 @@ def main() -> None:
         citizen_response = run_llm(citizen_prompt_text)
 
         civil_persona = civil_personas[index - 1]
+        citizen_complaint = citizen_response.split("4. 정책에 대해 공무원한테 예상 민원이나 불만을 토로하는 대사:")[-1].strip()
 
         civil_prompt_text = civil_servant_prompt(
             persona=civil_persona,
             policy=policy,
-            citizen_complaint=citizen_response,
+            citizen_complaint=citizen_complaint,
         )
 
         civil_response = run_llm(civil_prompt_text)

@@ -25,7 +25,7 @@ def civil_servant_prompt(persona: dict, policy: dict, citizen_complaint: str) ->
 2. 파악된 성격: []
 3. 예상 민원 또는 갈등 지점: []
 4. 정책 집행 시 주의할 점: []
-5. 대응 전략: []
+5. 민원에 대한 대응 대사: []
 
 []를 무조건 채워서 출력하세요
 
