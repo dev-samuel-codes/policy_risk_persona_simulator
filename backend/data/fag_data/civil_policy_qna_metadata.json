@@ -1,0 +1,29 @@
+{
+  "policySourceDir": "/Users/samuel/Desktop/Project/policy_risk_persona_simulator/backend/data/policy_data",
+  "policySourceCount": 10966,
+  "policyStartIndex": 66,
+  "resumeBasePolicyStartIndex": 0,
+  "policyLimit": 0,
+  "policyMaxQnaPerPolicy": 15,
+  "nextPolicyStartIndex": 254,
+  "lastStartedPolicyIndex": 254,
+  "lastCompletedPolicyIndex": 253,
+  "policyKeywordFields": [
+    "서비스명"
+  ],
+  "policyMaxKeywords": 3,
+  "policyKeywordMaxLength": 100,
+  "selectedPolicyCount": 10900,
+  "searchedPolicyCount": 188,
+  "searchedKeywordCount": 473,
+  "skippedExistingPolicyCount": 0,
+  "matchedPolicyCount": 156,
+  "totalAvailableMatchCount": 11367,
+  "stoppedReason": null,
+  "apiCallLimit": 10000,
+  "apiCallUsed": 2243,
+  "apiCallRemaining": 7757,
+  "apiCallExhausted": false,
+  "savedListCount": 2180,
+  "savedDetailCount": 2168
+}
