@@ -78,7 +78,7 @@ class LLM:
         with torch.no_grad():
             generated_ids = self.model.generate(
                 **model_inputs,
-                max_new_tokens=1024,     # 새로 생성할 수 있는 최대 토큰 수
+                max_new_tokens=2048,     # 새로 생성할 수 있는 최대 토큰 수
                 do_sample=True,         # 답변 생성 시 항상 가장 높은 단어를 고를지 또는 확률적으로 샘플링 할지
                 temperature=0.7,        # 창의성 또는 랜덤성 조절: 0.7은 균형 잡힌 값, 낮으면 안정적 및 보수적
                 top_p=0.9,              # 확률이 높은 후보들을 누적 확률를 선택
