@@ -38,4 +38,6 @@ def citizen_prompt(persona: dict, policy: dict) -> str:
 
 페르소나:
 {persona_text}
+정책:
+{policy_text}
 """.strip()

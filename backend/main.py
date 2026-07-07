@@ -11,16 +11,20 @@ def main() -> None:
     civil_personas = get_civil_servant_persona(limit=3, keyword="공무원", min_age=20, max_age=60)
     citizen_personas = get_citizen_persona(limit=3, excluded_keyword="공무원")
     policies = load_policies()
-
+    """
     for index, persona in enumerate(civil_personas, start=1):
         prompt = civil_servant_prompt(persona)
         response = run_llm(prompt)
 
         print(f"\n===== 공무원 PERSONA {index} RESULT =====")
         print(response)
+    """
 
+    policy = get_random_policy(policies)
+    
+    print("제시된 정책:", policy["상세정보"].get("서비스명"))
     for index, persona in enumerate(citizen_personas, start=1):
-        policy = get_random_policy(policies)
+        
 
         prompt = citizen_prompt(
             persona=persona,

@@ -46,6 +46,6 @@ def load_policies() -> list[dict]:
 
     return policies
 
-# 랜던으로 정책 선책
+# 랜던으로 정책 선택
 def get_random_policy(policies: list[dict]) -> dict:
     return random.choice(policies)
