@@ -1,6 +1,6 @@
 # 공무원 전용 프롬프트
 
-def civil_servant_prompt(persona: dict) -> str:
+def civil_servant_prompt(persona: dict, policy: dict, citizen_complaint: str) -> str:
     persona_text = "\n".join(
         f"{key}: {value}"
         for key, value in persona.items()
@@ -8,9 +8,10 @@ def civil_servant_prompt(persona: dict) -> str:
     )
 
     return f"""
-당신은 현재 공무원입니다. 시민의 민원에 대응하는 역할입니다.
+당신은 공무원입니다. 시민의 민원에 대응하는 역할입니다.
 반드시 한국어로만 답하세요.
 추론 과정은 출력하지 말고 최종 분석만 출력하세요.
+아래 시민 민원을 보고 공무원 입장에서 답변하세요.
 
 분석할 때 다음 관점을 반영하세요.
 1. 공무원으로서의 정책 집행 리스크
@@ -30,4 +31,10 @@ def civil_servant_prompt(persona: dict) -> str:
 
 페르소나:
 {persona_text}
+
+정책:
+{policy}
+
+시민 민원:
+{citizen_complaint}
 """.strip()
