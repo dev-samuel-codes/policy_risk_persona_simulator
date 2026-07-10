@@ -1,0 +1,35 @@
+# 민원 리스크 카테고리 정의
+# 가중치(weight)는 초기값이며, KOSIS 통계로 추후 보정 예정
+risk_categories:
+  - id: target_ambiguous
+    name: "대상 조건 모호"
+    description: "지원 대상인지 스스로 판단하기 어려움"
+    weight: 0.15
+  - id: access_barrier
+    name: "신청 접근성 문제"
+    description: "온라인 전용, 방문 필수 등 접근 장벽"
+    weight: 0.20
+  - id: document_burden
+    name: "서류 부담"
+    description: "제출 서류가 많거나 발급 절차가 복잡함"
+    weight: 0.15
+  - id: info_gap
+    name: "정보 격차"
+    description: "행정 용어가 어렵고 설명이 부족함"
+    weight: 0.10
+  - id: equity_issue
+    name: "형평성 논란"
+    description: "특정 계층이 이유 없이 제외된다고 느낄 가능성"
+    weight: 0.15
+  - id: regional_gap
+    name: "지역 격차"
+    description: "도시·농어촌, 수도권·비수도권 간 접근 차이"
+    weight: 0.10
+  - id: digital_divide
+    name: "디지털 취약"
+    description: "고령층·장애인 등의 디지털 접근 문제"
+    weight: 0.10
+  - id: complaint_surge
+    name: "민원 폭증 가능"
+    description: "FAQ 부족으로 반복 문의가 예상됨"
+    weight: 0.05
