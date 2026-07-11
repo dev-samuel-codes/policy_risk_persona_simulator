@@ -2,7 +2,7 @@ import yaml
 import json
 
 
-def load_risk_pack(path="risk-packs/civil-complaint-risk.yaml"):
+def load_risk_pack(path="backend/scoring/civil-complaint-risk.yaml"):
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)["risk_categories"]
 

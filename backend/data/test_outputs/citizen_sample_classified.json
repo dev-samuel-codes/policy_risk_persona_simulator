@@ -43,7 +43,7 @@
       {
         "complaint_text": "월세 지원 금액이 너무 적다.",
         "dialogue": "월 20만원이라는 돈으로는 월세를 다 못 내는데, 이거 어떻게 살아야 하나요? 집주인한테 빚을 지게 될지도 모르겠네요. 정부가 좀 더 실질적인 지원을 해줬으면 좋겠어요.",
-        "risk_category": "access_barrier"
+        "risk_category": "equity_issue"
       }
     ],
     "persona_id": "6d9b749d828d4f27837aa1148a1ffaf7",
