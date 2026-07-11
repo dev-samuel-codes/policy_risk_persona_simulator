@@ -1,0 +1,19 @@
+{
+  "querySignature": "8546c18df458cedfc8146345bab9fc922b0a6ef641acee74d71f339cc099b776",
+  "totalCount": 531,
+  "totalPages": 6,
+  "completedPages": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "failedPages": [],
+  "requestCount": 6,
+  "duplicateCount": 531,
+  "invalidItemCount": 0,
+  "savedRecordCount": 531,
+  "updatedAt": "2026-07-11T22:57:01+09:00"
+}
