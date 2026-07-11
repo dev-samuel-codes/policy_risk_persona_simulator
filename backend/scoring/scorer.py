@@ -31,7 +31,7 @@ def compute_index(classified_results: list[dict], risk_pack: list[dict]) -> dict
 
 
 if __name__ == "__main__":
-    from backend.risk_scoring.classifier import add_risk_categories
+    from backend.scoring.classifier import add_risk_categories
 
     risk_pack = load_risk_pack()
     with open("backend/data/test_outputs/citizen_sample.json", encoding="utf-8") as f:

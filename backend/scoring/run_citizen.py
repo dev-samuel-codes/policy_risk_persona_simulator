@@ -2,8 +2,8 @@ import ollama
 import json
 import re
 import sqlite3
-from backend.ai_simulation_core.llm_inference.prompts.citizen_v2 import citizen_prompt
-from backend.ai_simulation_core.llm_inference.validator import validate_citizen_response
+from backend.scoring.citizen_prompt import citizen_prompt
+from backend.scoring.validator import validate_citizen_response
 
 def parse_citizen_response(raw_output: str) -> dict:
     cleaned = re.sub(r"^```json\s*|\s*```$", "", raw_output.strip())
@@ -72,7 +72,7 @@ def load_test_personas(db_path: str, n: int = 5) -> list[dict]:
 
 if __name__ == "__main__":
     test_personas = load_test_personas(
-        db_path=r"C:\Users\chhs2\korean-people-persona\database\persona.db", n=5
+        db_path=r"C:\Users\chhs2\korean-people-persona\database\persona.db", n=25
     )
 
     test_policy = {

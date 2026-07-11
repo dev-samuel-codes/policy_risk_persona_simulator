@@ -1,5 +1,5 @@
 import ollama
-from backend.risk_scoring.risk_keywords import RISK_KEYWORDS
+from backend.scoring.risk_keywords import RISK_KEYWORDS
 
 
 def classify_by_rule(complaint_text: str) -> str | None:
