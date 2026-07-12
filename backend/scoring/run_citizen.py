@@ -1,11 +1,16 @@
-import ollama
 import json
 import re
 import sqlite3
-from backend.scoring.citizen_prompt import citizen_prompt
+
+from backend.ai_simulation_core.llm_inference.llm_gateway.models.run_llm import (
+    run_llm,
+)
+from backend.ai_simulation_core.llm_inference.prompts.citizen import citizen_prompt
 from backend.scoring.validator import validate_citizen_response
 
-def parse_citizen_response(raw_output: str) -> dict:
+
+def parse_citizen_response(raw_output: str) -> dict | None:
+    # 로컬 모델이 JSON 코드 블록을 붙인 경우 마크다운 기호를 제거
     cleaned = re.sub(r"^```json\s*|\s*```$", "", raw_output.strip())
     try:
         return json.loads(cleaned)
@@ -14,25 +19,18 @@ def parse_citizen_response(raw_output: str) -> dict:
         return None
 
 
-def _call_ollama(prompt: str, model: str, temperature: float) -> dict:
-    response = ollama.chat(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        options={"temperature": temperature},
-    )
-    return parse_citizen_response(response["message"]["content"])
-
-
 def run_citizen_simulation(
-    persona: dict, policy: dict, model: str = "qwen2.5:7b", max_retries: int = 3
-) -> dict:
+    persona: dict, policy: dict, max_retries: int = 3
+) -> dict | None:
     prompt = citizen_prompt(persona, policy)
-    temperatures = [0.6, 0.4, 0.2]  # 재시도할수록 더 보수적으로
 
     parsed = None
+    errors = []
+
     for attempt in range(max_retries):
-        temp = temperatures[min(attempt, len(temperatures) - 1)]
-        parsed = _call_ollama(prompt, model, temp)
+        # main과 같은 로컬 Qwen 모델을 사용하여 시민 응답 생성
+        raw_output = run_llm(prompt)
+        parsed = parse_citizen_response(raw_output)
 
         if parsed is None:
             print(f"  [시도 {attempt + 1}/{max_retries}] JSON 파싱 실패, 재시도")
@@ -43,13 +41,14 @@ def run_citizen_simulation(
             if attempt > 0:
                 print(f"  [시도 {attempt + 1}/{max_retries}] 검증 통과")
             break
-        else:
-            print(f"  [시도 {attempt + 1}/{max_retries}] 검증 실패: {errors}")
+        print(f"  [시도 {attempt + 1}/{max_retries}] 검증 실패: {errors}")
 
-    if parsed:
-        parsed["persona_id"] = persona.get("id")
-        parsed["_validation_errors"] = errors if 'errors' in dir() else []
+    if parsed is None:
+        return None
 
+    # 스코어링과 결과 확인에 필요한 페르소나 식별자와 검증 결과 추가
+    parsed["persona_id"] = persona.get("id")
+    parsed["_validation_errors"] = errors
     return parsed
 
 

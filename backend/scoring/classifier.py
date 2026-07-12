@@ -1,4 +1,6 @@
-import ollama
+from backend.ai_simulation_core.llm_inference.llm_gateway.models.run_llm import (
+    run_llm,
+)
 from backend.scoring.risk_keywords import RISK_KEYWORDS
 
 
@@ -13,10 +15,11 @@ def classify_by_rule(complaint_text: str) -> str | None:
     return max(scores, key=scores.get)
 
 
-def classify_by_llm(complaint_text: str, model: str = "qwen2.5:7b") -> str:
+def classify_by_llm(complaint_text: str) -> str:
     prompt = f"""
 다음 민원 문장을 아래 8개 카테고리 중 가장 가까운 것 하나로만 분류하세요.
 반드시 카테고리 id만 출력하세요 (설명 없이 id 한 단어만).
+카테고리 id는 분류 코드이므로 영어 표기를 그대로 사용하세요.
 
 카테고리:
 - target_ambiguous : 대상 조건 모호
@@ -33,8 +36,8 @@ def classify_by_llm(complaint_text: str, model: str = "qwen2.5:7b") -> str:
 출력 (id만):
 """.strip()
 
-    response = ollama.chat(model=model, messages=[{"role": "user", "content": prompt}])
-    result = response["message"]["content"].strip()
+    # 시민 응답 생성과 같은 로컬 Qwen 모델을 사용하여 민원 분류
+    result = run_llm(prompt).strip()
     valid_ids = set(RISK_KEYWORDS.keys())
     return result if result in valid_ids else "complaint_surge"
 

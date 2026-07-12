@@ -22,8 +22,16 @@ def validate_citizen_response(result: dict, persona: dict, policy: dict) -> list
     if not name.strip():
         errors.append("이름 필드가 비어있음")
 
-    # 3) 영어 혼용 체크 (전체 텍스트 대상)
-    full_text = str(result)
+    # 3) JSON 영문 키를 제외하고 모델이 생성한 실제 문장만 영어 혼용 체크
+    persona_summary = result.get("persona_summary", {})
+    complaints = result.get("complaints", [])
+    generated_texts = [
+        *(str(value) for value in persona_summary.values()),
+        str(result.get("personality", "")),
+        *(str(complaint.get("complaint_text", "")) for complaint in complaints),
+        *(str(complaint.get("dialogue", "")) for complaint in complaints),
+    ]
+    full_text = " ".join(generated_texts)
     if re.search(r"[a-zA-Z]{3,}", full_text):
         errors.append("영어 단어 혼용 감지")
 
@@ -37,7 +45,6 @@ def validate_citizen_response(result: dict, persona: dict, policy: dict) -> list
 
     if is_out_of_age_range:
         age_keywords = ["나이", "세", "청년", "연령", "34"]
-        complaints = result.get("complaints", [])
         mentions_age_reason = any(
             any(kw in c.get("complaint_text", "") for kw in age_keywords)
             for c in complaints
