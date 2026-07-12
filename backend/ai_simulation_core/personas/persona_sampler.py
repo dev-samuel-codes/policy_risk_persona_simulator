@@ -7,7 +7,7 @@ import random
 import pandas as pd
 import pyarrow.parquet as pq
 
-from backend.ai_simulation_core.llm_inference.get_nemotron_personas import (
+from backend.ai_simulation_core.personas.persona_downloader import (
     get_local_parquet_files,
 )
 
@@ -27,6 +27,7 @@ PERSONA_COLUMNS = [
     "family_persona",
     "persona",
 ]
+
 
 # pandas / numpy 값을 일반 Python 값으로 변환
 def clean_value(value: Any) -> Any:
@@ -50,11 +51,7 @@ def get_available_columns(parquet_file: Path) -> list[str]:
     parquet_schema = pq.ParquetFile(parquet_file).schema
     available_column_names = set(parquet_schema.names)
 
-    return [
-        column
-        for column in PERSONA_COLUMNS
-        if column in available_column_names
-    ]
+    return [column for column in PERSONA_COLUMNS if column in available_column_names]
 
 
 # parquet 한 줄을 dict 형태의 페르소나로 변환
@@ -103,10 +100,7 @@ def get_civil_servant_persona(
         )
 
         matched_df = df[
-            df["occupation"]
-            .fillna("")
-            .astype(str)
-            .str.contains(keyword, regex=False)
+            df["occupation"].fillna("").astype(str).str.contains(keyword, regex=False)
         ]
 
         if min_age is not None:
@@ -130,6 +124,7 @@ def get_civil_servant_persona(
     raise ValueError(
         f"[ERROR] '{keyword}' 키워드가 포함된 페르소나를 {limit}개 찾지 못했습니다."
     )
+
 
 # 공무원이 아닌 페르소나를 limit 개수만큼 가져오기
 def get_citizen_persona(
@@ -177,9 +172,7 @@ def get_citizen_persona(
         )
 
         # 공무원이 아닌 사람만 선택
-        matched_df = df[
-            has_occupation & contains_excluded_keyword.eq(False)
-        ]
+        matched_df = df[has_occupation & contains_excluded_keyword.eq(False)]
 
         if min_age is not None:
             matched_df = matched_df[matched_df["age"] >= min_age]

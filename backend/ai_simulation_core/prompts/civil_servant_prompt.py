@@ -1,10 +1,9 @@
 # 공무원 전용 프롬프트
 
+
 def civil_servant_prompt(persona: dict, policy: dict, citizen_complaint: str) -> str:
     persona_text = "\n".join(
-        f"{key}: {value}"
-        for key, value in persona.items()
-        if value is not None
+        f"{key}: {value}" for key, value in persona.items() if value is not None
     )
 
     return f"""

@@ -1,0 +1,20 @@
+[project]
+name = "policy-risk-persona-simulator"
+version = "0.1.0"
+description = "정책 민원 리스크 페르소나 시뮬레이터"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate==1.14.0",
+    "huggingface-hub==1.21.0",
+    "pandas==3.0.3",
+    "pyarrow==24.0.0",
+    "pyyaml>=6.0,<7",
+    "safetensors==0.8.0",
+    "sentencepiece==0.2.1",
+    "torch==2.12.1",
+    "transformers==5.12.1",
+]
+
+[tool.ruff]
+target-version = "py312"
