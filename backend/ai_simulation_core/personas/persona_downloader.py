@@ -12,12 +12,12 @@ DATASET_REPO_ID = "nvidia/Nemotron-Personas-Korea"
 # 어떤 파일로 받을 지 선택: CSV / JSON / Parquet
 REVISION = "refs/convert/parquet"
 
-# 현재 파일 위치 기준으로 backend 폴더 경로 찾기
-BACKEND_DIR = Path(__file__).resolve().parents[2]
+# 현재 파일 위치 기준으로 프로젝트 루트 경로 찾기
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # 저장 경로 설정
-# 최종적으로 backend/data/nometron_persona_korea/*.parquet 형태로 저장
-LOCAL_DIR = BACKEND_DIR / "data" / "nometron_persona_korea"
+# 최종적으로 data/raw/personas/*.parquet 형태로 저장
+LOCAL_DIR = PROJECT_ROOT / "data" / "raw" / "personas"
 
 # snapshot_download가 임시로 내려받는 Hugging Face 내부 경로
 TEMP_TRAIN_DIR = LOCAL_DIR / "default" / "train"
@@ -39,7 +39,7 @@ def is_already_downloaded() -> bool:
     return all(file_path.stat().st_size > 0 for file_path in parquet_files)
 
 
-# Hugging Face에서 받은 default/train/*.parquet 파일을 backend/data/nometron_persona_korea/*.parquet 위치로 이동
+# Hugging Face에서 받은 default/train/*.parquet 파일을 data/raw/personas/*.parquet 위치로 이동
 def flatten_parquet_files() -> None:
     if not TEMP_TRAIN_DIR.exists():
         raise RuntimeError(
@@ -93,7 +93,9 @@ def download_dataset() -> Path:
     )
 
     if not is_already_downloaded():
-        raise RuntimeError("[ERROR] 데이터셋 다운로드가 정상적으로 완료되지 않았습니다.")
+        raise RuntimeError(
+            "[ERROR] 데이터셋 다운로드가 정상적으로 완료되지 않았습니다."
+        )
 
     print("[DONE] 다운로드 완료.")
     print(f"[PATH] {LOCAL_DIR.resolve()}")
@@ -118,10 +120,7 @@ def get_persona(limit: int = 10) -> list[dict[str, Any]]:
         dataframe = pd.read_parquet(parquet_file)
 
         for persona in dataframe.to_dict(orient="records"):
-            persona_record = {
-                str(key): value
-                for key, value in persona.items()
-            }
+            persona_record = {str(key): value for key, value in persona.items()}
             personas.append(persona_record)
 
             if len(personas) >= limit:

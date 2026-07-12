@@ -4,15 +4,18 @@ import json
 import random
 from pathlib import Path
 
-# 데이터베이스 경로
-POLICY_DATA_DIR = Path("backend/data/policy_data")
+# 현재 파일 위치 기준으로 정책 데이터 경로 설정
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+POLICY_DATA_DIR = PROJECT_ROOT / "data" / "raw" / "policies"
+
 
 # JSON 파일을 하나 읽어서 안의 data 값 반환
 def load_json_data(file_name: str) -> list[dict]:
     path = POLICY_DATA_DIR / file_name
-    payload = json.loads(path.read_text(encoding="utf-8")) # 한글이 존재 -> utf-8
+    payload = json.loads(path.read_text(encoding="utf-8"))  # 한글이 존재 -> utf-8
 
     return payload["data"]
+
 
 def load_policies() -> list[dict]:
     service_list = load_json_data("service_list.json")
@@ -20,14 +23,10 @@ def load_policies() -> list[dict]:
     support_conditions = load_json_data("support_conditions.json")
 
     # 상세 정보를 서비스id 기준 딕셔너리로 변환
-    detail_by_id = {
-        item["서비스ID"]: item
-        for item in service_detail
-    }
+    detail_by_id = {item["서비스ID"]: item for item in service_detail}
 
-    conditions_by_id = {                # 지원조건
-        item["서비스ID"]: item
-        for item in support_conditions
+    conditions_by_id = {  # 지원조건
+        item["서비스ID"]: item for item in support_conditions
     }
 
     # 최종 정책 리스트 생성
@@ -46,6 +45,7 @@ def load_policies() -> list[dict]:
 
     return policies
 
-# 랜던으로 정책 선택
+
+# 랜덤으로 정책 선택
 def get_random_policy(policies: list[dict]) -> dict:
     return random.choice(policies)

@@ -1,13 +1,12 @@
-.venv
-.env.qna_call_api
-.vscode
-__pycache__
+.venv/
+.env
+.env.*
+!.env.example
+.vscode/
+__pycache__/
+*.py[cod]
 .DS_Store
-dataset
-nometron_persona_korea
+.pytest_cache/
+.ruff_cache/
 
-backend/data/law_data/.env
-
-backend/data/law_data/law_bodies/
-
-backend/data/law_data/.env
+data/raw/personas/

@@ -1,4 +1,4 @@
-from backend.ai_simulation_core.llm_inference.llm_gateway.models.run_llm import (
+from backend.ai_simulation_core.llm.llm_gateway import (
     run_llm,
 )
 from backend.scoring.risk_keywords import RISK_KEYWORDS

@@ -1,5 +1,6 @@
 # 시민 전용 프롬프트
 
+
 def citizen_prompt(persona: dict, policy: dict) -> str:
     persona_text = "\n".join(
         f"{key}: {value}" for key, value in persona.items() if value is not None
