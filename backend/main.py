@@ -59,8 +59,12 @@ def main() -> None:
         print(f"\n===== 공무원 PERSONA {index} RESULT =====")
         print(civil_response)
 
-        print("\n===== 정책 민원 리스크 =====")
-        print(json.dumps(risk_score, ensure_ascii=False, indent=2))
+    risk_pack = load_risk_pack()
+    classified_results = add_risk_categories(simulation_results)
+    risk_score = compute_index(classified_results, risk_pack)
+
+    print("\n===== 정책 민원 리스크 =====")
+    print(json.dumps(risk_score, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
