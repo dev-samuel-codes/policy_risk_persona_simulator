@@ -102,6 +102,6 @@ def run_citizen_simulation(
         return None
 
     # 스코어링과 결과 확인에 필요한 페르소나 식별자와 검증 결과 추가
-    parsed["persona_id"] = persona.get("id")
+    parsed["persona_id"] = persona.get("uuid")
     parsed["_validation_errors"] = errors
     return parsed
