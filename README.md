@@ -277,10 +277,10 @@ python -m backend.main
 
 ### 정책 JSON 보조 입력 도구
 
-루트의 `policy_json_converter.py`는 정책 필드를 터미널에서 입력받아 JSON을 출력하는 독립 보조 도구입니다.
+`scripts/policy_json_converter.py`는 정책 필드를 터미널에서 입력받아 JSON을 출력하는 독립 보조 도구입니다.
 
 ```bash
-python policy_json_converter.py
+python scripts/policy_json_converter.py
 ```
 
 > [!NOTE]
@@ -356,7 +356,8 @@ python policy_json_converter.py
 │   └── raw/
 │       ├── policies/
 │       └── personas/              # 실행 중 자동 생성, Git 제외
-├── policy_json_converter.py
+├── scripts/
+│   └── policy_json_converter.py
 ├── pyproject.toml
 └── README.md
 ```
