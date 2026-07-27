@@ -10,3 +10,5 @@ __pycache__/
 .ruff_cache/
 
 data/raw/personas/
+data/raw/reactions
+scripts/oneoff
