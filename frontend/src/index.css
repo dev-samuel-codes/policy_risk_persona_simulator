@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Pretendard GOV — 유일하게 사용하는 서체 (variable, weight 45–920)
+   출처: https://github.com/orioncactus/pretendard (SIL OFL 1.1)
+------------------------------------------------------------------- */
+@font-face {
+  font-family: "Pretendard GOV Variable";
+  src: url("./assets/fonts/PretendardGOVVariable.woff2") format("woff2-variations"),
+       url("./assets/fonts/PretendardGOVVariable.woff2") format("woff2");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* Type */
+  --font-gov: "Pretendard GOV Variable", "Pretendard", -apple-system, sans-serif;
+
+  /* Color — Civic / 공공 톤. 리스크 등급 색(danger/caution/safe)은
+     brand 색과 절대 겹치지 않도록 분리해 둔다. */
+  --color-ink: #14171c;       /* 본문 텍스트 */
+  --color-slate: #5b6472;     /* 보조 텍스트 */
+  --color-paper: #ffffff;     /* 배경 (완전한 흰색 대신 아주 옅은 웜톤) */
+  --color-surface: #f2f1ee;   /* 카드/패널 배경 */
+  --color-line: #e3e1db;      /* 구분선, 테두리 */
+  --color-brand: #2c4a6e;     /* 주요 브랜드 컬러 — 딥 네이비블루 */
+  --color-brand-strong: #1c324e;
+  --color-brand-soft: #e9eef3;
+
+  /* 리스크 등급 전용 색 — 다른 용도로 절대 재사용하지 않음 */
+  --color-risk-danger: #b3392c;
+  --color-risk-caution: #a8791c;
+ --color-accent-teal: #2f6f6a;
+  --color-accent-teal-soft: #e7f0ef;
+  --color-accent-indigo: #46508f;
+  --color-accent-indigo-soft: #ecedf6;
+  --color-accent-sand: #8a6b2f;
+  --color-accent-sand-soft: #f3ecdd;
+
+  --radius-card: 28px;;
+  --radius-pill: 999px;
+}
+
+html {
+  font-family: var(--font-gov);
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(to bottom, #ffffff 0%, #fbfbfb 100%);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
