@@ -1,12 +1,12 @@
 import json
 
+from backend.ai_simulation_core.llm.llm_gateway import unload_llm
 from backend.ai_simulation_core.personas.persona_sampler import (
     get_citizen_persona,
     get_civil_servant_persona,
 )
 from backend.ai_simulation_core.policies.policy_repository import (
-    get_random_policy,
-    load_policies,
+    get_active_or_random_policy,
 )
 from backend.ai_simulation_core.simulations.citizen_simulation import (
     run_citizen_simulation,
@@ -18,31 +18,48 @@ from backend.scoring.risk_classifier import add_risk_categories
 from backend.scoring.risk_scorer import compute_index, load_risk_pack
 
 
-def run_pipeline() -> None:
+def run_pipeline(policy: dict | None = None) -> dict:
+    try:
+        return _run_pipeline(policy=policy)
+    finally:
+        # 정상 완료, 조기 반환, 예외 및 Ctrl+C 모두에서 LLM 프로세스를 종료한다.
+        unload_llm()
+
+
+def _run_pipeline(policy: dict | None = None) -> dict:
     civil_personas = get_civil_servant_persona(
         limit=3, keyword="공무원", min_age=20, max_age=60
     )
     citizen_personas = get_citizen_persona(limit=3, excluded_keyword="공무원")
-    policy = get_random_policy(load_policies())
+    selected_policy = policy or get_active_or_random_policy()
 
-    print("제시된 정책:", policy["상세정보"].get("서비스명"))
+    print("제시된 정책:", selected_policy["상세정보"].get("서비스명"))
 
     simulation_results = []
+    civil_servant_results = []
 
     for index, persona in enumerate(citizen_personas, start=1):
         # 시민 응답 생성, JSON 파싱, 결과 검증을 한 번에 수행
-        citizen_result = run_citizen_simulation(persona=persona, policy=policy)
+        citizen_result = run_citizen_simulation(persona=persona, policy=selected_policy)
         if citizen_result is None:
             print(f"\n===== 시민 PERSONA {index} 생성 실패 =====")
             continue
 
+        # 결과 화면에서 생성 대사와 실제 샘플링 페르소나를 연결할 수 있도록 보존
+        citizen_result["persona"] = persona
         simulation_results.append(citizen_result)
 
         # 같은 순번의 공무원 페르소나에게 현재 시민의 모든 민원을 전달
         civil_response = run_civil_servant_simulation(
             persona=civil_personas[index - 1],
-            policy=policy,
+            policy=selected_policy,
             citizen_result=citizen_result,
+        )
+        civil_servant_results.append(
+            {
+                "persona_index": index,
+                "response": civil_response,
+            }
         )
 
         print(f"\n===== 시민 PERSONA {index} RESULT =====")
@@ -53,7 +70,12 @@ def run_pipeline() -> None:
 
     if not simulation_results:
         print("\n정책 민원 리스크를 계산할 시민 응답이 없습니다.")
-        return
+        return {
+            "policy": selected_policy,
+            "citizen_results": [],
+            "civil_servant_results": civil_servant_results,
+            "risk_score": None,
+        }
 
     # 모든 시민 응답 생성이 끝난 뒤 정책 전체 리스크를 한 번만 계산
     classified_results = add_risk_categories(simulation_results)
@@ -61,3 +83,10 @@ def run_pipeline() -> None:
 
     print("\n===== 정책 민원 리스크 =====")
     print(json.dumps(risk_score, ensure_ascii=False, indent=2))
+
+    return {
+        "policy": selected_policy,
+        "citizen_results": classified_results,
+        "civil_servant_results": civil_servant_results,
+        "risk_score": risk_score,
+    }

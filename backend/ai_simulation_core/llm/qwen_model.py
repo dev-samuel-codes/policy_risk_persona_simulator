@@ -10,6 +10,7 @@ print(answer)
 를 작성하면 사용가능
 """
 
+import gc
 from typing import Any
 
 import torch
@@ -44,9 +45,12 @@ class LLM:
 
         self.model.to(self.device)
         self.model.eval()
+        self._closed = False
 
     # 사용자 질문을 받아서 모델 답변을 문자열로 반환
     def generate(self, prompt: str) -> str:
+        if self._closed:
+            raise RuntimeError("종료된 LLM은 다시 사용할 수 없습니다.")
 
         # 메세지 구성
         messages = [
@@ -100,3 +104,24 @@ class LLM:
         )[0]
 
         return response
+
+    def close(self) -> None:
+        """모델 참조와 가속기 캐시를 해제한다."""
+        if self._closed:
+            return
+
+        self._closed = True
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        if torch.backends.mps.is_available():
+            torch.mps.synchronize()
+
+        self.model = None
+        self.tokenizer = None
+
+        # PyTorch 텐서의 마지막 참조를 정리한 뒤 캐시된 VRAM도 반환한다.
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
