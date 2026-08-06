@@ -8,7 +8,47 @@ __pycache__/
 .DS_Store
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node dependencies and build output
+node_modules/
+dist/
+.next/
+.vinext/
+coverage/
+
+# Logs, process files, temporary files, and generated output
+*.log
+*.pid
+tmp/
+temp/
+output/
+outputs/
+
+# Model checkpoints and experiment trackers
+checkpoints/
+runs/
+wandb/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
 
 data/raw/personas/
 data/raw/reactions
+data/raw/laws/bodies/
+data/labels/**/*.csv
+data/labels/**/*.jsonl
+data/training/
+data/indexes/
+data/runtime/
 scripts/oneoff
+
+# Generated analysis and vector database artifacts
+analysis/**/output/
+**/chroma_db/
+law_simulator(rag)/law_conditions.json
+policy_simulator(rag)/policy_conditions.json
