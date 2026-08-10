@@ -4,10 +4,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
 
 from backend.ai_simulation_core.pipeline import run_pipeline
+from backend.ai_simulation_core.policies.policy_file_extractor import (
+    PolicyFileExtractionError,
+    extract_policy_fields_from_file,
+)
 from backend.ai_simulation_core.policies.policy_repository import (
     build_direct_policy,
     load_active_policy,
@@ -179,6 +183,17 @@ def get_active_policy() -> dict:
     if policy is None:
         raise HTTPException(status_code=404, detail="활성 정책이 없습니다.")
     return {"status": "ok", "policy": policy}
+
+
+@app.post("/api/policies/extract-file")
+async def extract_policy_file(file: UploadFile = File(...)) -> dict:
+    content = await file.read()
+    try:
+        fields = extract_policy_fields_from_file(file.filename or "", content)
+    except PolicyFileExtractionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    return {"status": "ok", "fields": fields}
 
 
 @app.post("/api/policies/similar")
