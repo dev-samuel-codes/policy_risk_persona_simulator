@@ -3,7 +3,7 @@ import { MessageCircle, PencilLine, Upload } from "lucide-react";
 import ChatEmptyState from "../components/ChatEmptyState";
 import SimulationLayout from "../components/SimulationLayout";
 
-const ACCEPTED_POLICY_FILES = ".pdf,.doc,.docx,.txt,.md";
+const ACCEPTED_POLICY_FILES = ".pdf,.docx,.hwp,.hwpx,.txt,.md";
 const SIMULATION_POLL_INTERVAL_MS = 3000;
 const SIMULATION_MAX_POLLS = 600;
 const INPUT_CLASS =
@@ -16,6 +16,7 @@ function PolicyField({
   required = false,
   rows,
   type = "text",
+  defaultValue,
 }) {
   return (
     <label className="block text-[15px] font-semibold text-ink">
@@ -27,6 +28,7 @@ function PolicyField({
           rows={rows}
           required={required}
           placeholder={placeholder}
+          defaultValue={defaultValue}
           className={`${INPUT_CLASS} resize-y`}
         />
       ) : (
@@ -35,6 +37,7 @@ function PolicyField({
           type={type}
           required={required}
           placeholder={placeholder}
+          defaultValue={defaultValue}
           className={INPUT_CLASS}
         />
       )}
@@ -42,8 +45,16 @@ function PolicyField({
   );
 }
 
-function DirectPolicyForm({ onSimulationStarted }) {
-  const [canSubmit, setCanSubmit] = useState(false);
+function DirectPolicyForm({
+  onSimulationStarted,
+  initialValues,
+  heading = "정책 직접 입력",
+  subheading,
+}) {
+  const values = initialValues ?? {};
+  const [canSubmit, setCanSubmit] = useState(
+    Boolean(values.policy_name?.trim() && values.benefits?.trim()),
+  );
   const [submissionState, setSubmissionState] = useState("idle");
   const [submissionError, setSubmissionError] = useState("");
   const isSubmitting = submissionState === "submitting";
@@ -98,8 +109,11 @@ function DirectPolicyForm({ onSimulationStarted }) {
         onSubmit={submitPolicy}
       >
         <h1 className="text-[30px] font-bold tracking-[-0.025em] text-ink">
-          정책 직접 입력
+          {heading}
         </h1>
+        {subheading && (
+          <p className="mt-2 text-[14px] leading-6 text-slate">{subheading}</p>
+        )}
 
         <fieldset
           disabled={isSubmitting}
@@ -110,6 +124,7 @@ function DirectPolicyForm({ onSimulationStarted }) {
               label="정책명"
               name="policy_name"
               placeholder="정책명을 입력하세요."
+              defaultValue={values.policy_name}
               required
             />
           </div>
@@ -119,6 +134,7 @@ function DirectPolicyForm({ onSimulationStarted }) {
               label="지원대상"
               name="target_audience"
               placeholder="지원 대상과 자격 요건을 입력하세요."
+              defaultValue={values.target_audience}
               rows={3}
             />
           </div>
@@ -127,23 +143,27 @@ function DirectPolicyForm({ onSimulationStarted }) {
             label="신청기간"
             name="application_period"
             placeholder="예: 2026.08.01 ~ 2026.08.31"
+            defaultValue={values.application_period}
           />
           <PolicyField
             label="시행일"
             name="effective_date"
             type="date"
+            defaultValue={values.effective_date}
           />
 
           <PolicyField
             label="제출서류"
             name="required_documents"
             placeholder="필요한 제출서류를 입력하세요."
+            defaultValue={values.required_documents}
             rows={4}
           />
           <PolicyField
             label="신청방법"
             name="application_method"
             placeholder="온라인, 방문 등 신청방법을 입력하세요."
+            defaultValue={values.application_method}
             rows={4}
           />
 
@@ -152,13 +172,15 @@ function DirectPolicyForm({ onSimulationStarted }) {
               label="문의처"
               name="contact"
               placeholder="담당 기관, 부서, 전화번호 등을 입력하세요."
+              defaultValue={values.contact}
             />
           </div>
 
           <PolicyField
-            label="혜택"
+            label="지원금(혜택)"
             name="benefits"
             placeholder="지원 금액과 제공 혜택을 입력하세요."
+            defaultValue={values.benefits}
             required
             rows={4}
           />
@@ -166,6 +188,7 @@ function DirectPolicyForm({ onSimulationStarted }) {
             label="제외조건"
             name="exclusion_conditions"
             placeholder="지원에서 제외되는 조건을 입력하세요."
+            defaultValue={values.exclusion_conditions}
             rows={4}
           />
         </fieldset>
@@ -480,6 +503,10 @@ export default function PolicyPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [simulationJob, setSimulationJob] = useState(null);
+  const [extractionStatus, setExtractionStatus] = useState("idle");
+  const [extractionError, setExtractionError] = useState("");
+  const [extractedFields, setExtractedFields] = useState(null);
+  const isExtracting = extractionStatus === "extracting";
 
   const monitorSimulation = async (jobId) => {
     try {
@@ -532,6 +559,9 @@ export default function PolicyPage() {
     if (!file) return;
     setSelectedFile(file);
     setInputMode("file");
+    setExtractionStatus("idle");
+    setExtractionError("");
+    setExtractedFields(null);
   };
 
   const handleDrop = (event) => {
@@ -540,12 +570,61 @@ export default function PolicyPage() {
     selectFile(event.dataTransfer.files?.[0]);
   };
 
+  const extractSelectedFile = async () => {
+    if (!selectedFile || isExtracting) return;
+
+    setExtractionStatus("extracting");
+    setExtractionError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      const response = await fetch("/api/policies/extract-file", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const detail = typeof result?.detail === "string" ? result.detail : null;
+        throw new Error(detail ?? "파일에서 정책 정보를 추출하지 못했습니다.");
+      }
+
+      if (!result?.fields) {
+        throw new Error("추출된 정책 정보를 받지 못했습니다.");
+      }
+
+      setExtractedFields(result.fields);
+      setExtractionStatus("idle");
+      setInputMode("file-review");
+    } catch (error) {
+      setExtractionStatus("error");
+      setExtractionError(
+        error instanceof Error
+          ? error.message
+          : "파일에서 정책 정보를 추출하지 못했습니다.",
+      );
+    }
+  };
+
   if (simulationJob) {
     return <SimulationRunScreen job={simulationJob} />;
   }
 
   if (inputMode === "text") {
     return <DirectPolicyForm onSimulationStarted={openSimulationScreen} />;
+  }
+
+  if (inputMode === "file-review" && extractedFields) {
+    return (
+      <DirectPolicyForm
+        heading="파일에서 추출한 정책 정보"
+        subheading="자동으로 추출한 내용입니다. 실행 전에 내용을 확인하고 필요한 부분을 수정하세요."
+        initialValues={extractedFields}
+        onSimulationStarted={openSimulationScreen}
+      />
+    );
   }
 
   return (
@@ -601,26 +680,48 @@ export default function PolicyPage() {
           />
 
           <p className="mt-4 text-[13px] text-slate">
-            PDF, DOCX, TXT 파일을 끌어다 놓아도 됩니다.
+            PDF, DOCX, HWP, HWPX, TXT 파일을 끌어다 놓아도 됩니다.
           </p>
         </div>
 
         {inputMode === "file" && selectedFile && (
-          <div className="mt-5 flex w-full max-w-[740px] items-center justify-between gap-4 rounded-[18px] border border-[#dde1e8] bg-white px-5 py-4 text-left shadow-[0_10px_24px_rgba(20,23,28,0.05)]">
-            <div className="min-w-0">
-              <p className="truncate text-[15px] font-semibold text-ink">
-                {selectedFile.name}
-              </p>
-              <p className="mt-1 text-[13px] text-slate">
-                {(selectedFile.size / 1024).toFixed(1)} KB
-              </p>
+          <div className="mt-5 flex w-full max-w-[740px] flex-col gap-4 rounded-[18px] border border-[#dde1e8] bg-white px-5 py-4 text-left shadow-[0_10px_24px_rgba(20,23,28,0.05)]">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-semibold text-ink">
+                  {selectedFile.name}
+                </p>
+                <p className="mt-1 text-[13px] text-slate">
+                  {(selectedFile.size / 1024).toFixed(1)} KB
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isExtracting}
+                className="shrink-0 rounded-[10px] px-3 py-2 text-[14px] font-medium text-brand transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                파일 변경
+              </button>
             </div>
+
+            {extractionStatus === "error" && (
+              <p role="alert" className="text-[13px] font-medium text-[#9a342b]">
+                {extractionError}
+              </p>
+            )}
+
             <button
               type="button"
-              className="shrink-0 rounded-[10px] px-3 py-2 text-[14px] font-medium text-brand transition hover:bg-brand-soft"
-              onClick={() => fileInputRef.current?.click()}
+              disabled={isExtracting}
+              onClick={extractSelectedFile}
+              className={`flex min-h-[52px] items-center justify-center rounded-[13px] px-6 text-[15px] font-semibold text-white transition ${
+                isExtracting
+                  ? "cursor-not-allowed bg-[#b8c1cc]"
+                  : "bg-brand shadow-[0_8px_18px_rgba(44,74,110,0.18)] hover:bg-brand-strong hover:shadow-[0_10px_22px_rgba(44,74,110,0.23)]"
+              }`}
             >
-              파일 변경
+              {isExtracting ? "파일에서 정책 정보를 추출하는 중..." : "파일에서 정책 정보 추출"}
             </button>
           </div>
         )}
