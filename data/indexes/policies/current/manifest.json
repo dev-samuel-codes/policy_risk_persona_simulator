@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "collection_name": "policy_similarity",
+  "embedding_model": "snunlp/KR-SBERT-V40K-klueNLI-augSTS",
+  "embedding_dimension": 768,
+  "max_sequence_length": 512,
+  "document_count": 10966,
+  "unique_service_id_count": 10966,
+  "source_hashes": {
+    "service_list.json": "a2e7b7e383094342cd48c9a283d23c89e8e4ecf0757ed6037351d710f5b6b37e",
+    "service_detail.json": "9facd1684bca71d070ba79f2420bd4394a8e1958a2a82a0e6c0f964e238b3756",
+    "support_conditions.json": "27a2187b63d994d48f52c42b0d541d6ba5b26e3df7d5d02b71fd7a8419723947"
+  },
+  "built_at": "2026-08-06T05:09:38.960177+00:00"
+}
