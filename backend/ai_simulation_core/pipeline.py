@@ -58,6 +58,7 @@ def _run_pipeline(policy: dict | None = None) -> dict:
         civil_servant_results.append(
             {
                 "persona_index": index,
+                "persona": civil_personas[index - 1],
                 "response": civil_response,
             }
         )

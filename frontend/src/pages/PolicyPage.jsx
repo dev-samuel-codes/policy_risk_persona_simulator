@@ -254,6 +254,66 @@ function buildCitizenProfile(result, index) {
   };
 }
 
+function extractCivilServantField(response, label) {
+  if (!response) return null;
+
+  const bracketedMatch = response.match(
+    new RegExp(`${label}\\s*:\\s*\\[([^\\]]+)\\]`),
+  );
+  if (bracketedMatch?.[1]?.trim()) return bracketedMatch[1].trim();
+
+  const plainMatch = response.match(new RegExp(`${label}\\s*:\\s*([^/\\n]+)`));
+  return plainMatch?.[1]?.trim() || null;
+}
+
+function buildCivilServantProfile(result, index) {
+  const response = typeof result.response === "string" ? result.response.trim() : "";
+  const persona = result.persona ?? {};
+  const province = persona.province ?? "";
+  const district = persona.district ?? "";
+  const parsedLocation = extractCivilServantField(response, "거주지");
+  const location =
+    [province, district].filter(Boolean).join("-") || parsedLocation;
+  const parsedAge = extractCivilServantField(response, "나이");
+  const age = persona.age ?? parsedAge?.replace(/세$/, "");
+  const bracketedDialogue = response.match(
+    /민원에 대한 대응 대사\s*:\s*\[([\s\S]*?)\]\s*$/,
+  );
+  const plainDialogue = response.match(
+    /민원에 대한 대응 대사\s*:\s*([\s\S]*?)$/,
+  );
+  const dialogue =
+    bracketedDialogue?.[1]?.trim() || plainDialogue?.[1]?.trim() || response;
+
+  return {
+    id: persona.uuid ?? `official-${index + 1}`,
+    role: "official",
+    pairedCitizenIndex: result.persona_index ?? index + 1,
+    name:
+      extractCivilServantField(response, "이름") ?? `공무원 ${index + 1}`,
+    age,
+    job:
+      persona.occupation ??
+      extractCivilServantField(response, "직업") ??
+      "담당 공무원",
+    sex: persona.sex ?? extractCivilServantField(response, "성별"),
+    note: location || "거주지 정보 없음",
+    personality:
+      persona.persona ?? extractCivilServantField(response, "파악된 성격"),
+    livingEnvironment: persona.family_persona,
+    workEnvironment: persona.professional_persona,
+    dailyLife:
+      persona.sports_persona ??
+      persona.arts_persona ??
+      persona.travel_persona ??
+      persona.culinary_persona,
+    photo: null,
+    result: {
+      complaints: dialogue ? [{ dialogue }] : [],
+    },
+  };
+}
+
 function PolicySummaryCard({ policy }) {
   const detail = policy?.상세정보 ?? {};
   const list = policy?.목록정보 ?? {};
@@ -418,6 +478,7 @@ function PersonaProfile({ profile, children }) {
   const [isHovering, setIsHovering] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const isOpen = isHovering || isPinned;
+  const isOfficial = profile.role === "official";
   const popoverId = `persona-profile-${profile.id}`;
   const profileSummary = [
     profile.age ? `${profile.age}세` : null,
@@ -457,10 +518,12 @@ function PersonaProfile({ profile, children }) {
   }, [isPinned]);
 
   return (
-    <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+    <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)_64px] items-start gap-x-4">
       <div
         ref={containerRef}
-        className="relative shrink-0"
+        className={`relative row-start-1 shrink-0 ${
+          isOfficial ? "col-start-3" : "col-start-1"
+        }`}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
@@ -486,12 +549,16 @@ function PersonaProfile({ profile, children }) {
             id={popoverId}
             role="dialog"
             aria-label={`${profile.name} 상세 프로필`}
-            className="absolute left-0 top-full z-50 w-[min(420px,calc(100vw-40px))] pt-2"
+            className={`absolute top-0 z-50 w-[432px] ${
+              isOfficial ? "right-full pr-3" : "left-full pl-3"
+            }`}
           >
             <section className="max-h-[70vh] overflow-y-auto rounded-[20px] border border-[#dbe2ea] bg-white p-5 shadow-[0_18px_48px_rgba(20,23,28,0.16)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[12px] font-semibold text-brand">시민 프로필</p>
+                  <p className="text-[12px] font-semibold text-brand">
+                    {isOfficial ? "공무원 프로필" : "시민 프로필"}
+                  </p>
                   <h3 className="mt-1 text-[20px] font-bold text-ink">
                     {profile.name}
                   </h3>
@@ -544,8 +611,12 @@ function PersonaProfile({ profile, children }) {
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div className="col-start-2 row-start-1 min-w-0">
+        <div
+          className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${
+            isOfficial ? "flex-row-reverse" : ""
+          }`}
+        >
           <h2 className="text-[21px] font-bold text-ink">{profile.name}</h2>
           <span className="rounded-pill bg-surface px-3 py-1 text-[12px] text-slate">
             {profileSummary}
@@ -563,6 +634,7 @@ function PersonaProfile({ profile, children }) {
 
 function PersonaConversation({ profile }) {
   const complaints = profile.result?.complaints ?? [];
+  const isOfficial = profile.role === "official";
 
   return (
     <article className="min-w-0 pb-10 last:pb-0">
@@ -572,10 +644,14 @@ function PersonaConversation({ profile }) {
             complaints.map((complaint, index) => (
               <div
                 key={`${profile.id}-complaint-${index + 1}`}
-                className="rounded-[26px] rounded-tl-[10px] border border-[#edf0f4] bg-white px-5 py-4 shadow-[0_12px_30px_rgba(20,23,28,0.07)] sm:px-6 sm:py-5"
+                className={`rounded-[26px] border px-5 py-4 shadow-[0_12px_30px_rgba(20,23,28,0.07)] sm:px-6 sm:py-5 ${
+                  isOfficial
+                    ? "rounded-tr-[10px] border-brand/15 bg-brand-soft/45"
+                    : "rounded-tl-[10px] border-[#edf0f4] bg-white"
+                }`}
               >
                 <p className="text-[12px] font-semibold text-brand">
-                  {profile.name} · 반응 {index + 1}
+                  {profile.name} · {isOfficial ? "공무원 반응" : "반응"} {index + 1}
                 </p>
                 <blockquote className="mt-2 whitespace-pre-line text-[16px] font-medium leading-7 text-ink sm:text-[17px] sm:leading-8">
                   {complaint.dialogue}
@@ -589,7 +665,7 @@ function PersonaConversation({ profile }) {
             ))
           ) : (
             <p className="rounded-[26px] rounded-tl-[10px] border border-[#edf0f4] bg-white px-6 py-5 text-[14px] leading-6 text-slate shadow-[0_12px_30px_rgba(20,23,28,0.07)]">
-              생성된 시민 대사가 없습니다.
+              생성된 {isOfficial ? "공무원" : "시민"} 대사가 없습니다.
             </p>
           )}
         </div>
@@ -601,20 +677,47 @@ function PersonaConversation({ profile }) {
 function PersonaDialogueView({
   policy,
   profiles,
+  officialProfiles,
   riskScore,
   similarPolicies,
   similarity,
 }) {
   const [showSimilarPolicies, setShowSimilarPolicies] = useState(false);
+  const [showOfficialReactions, setShowOfficialReactions] = useState(false);
+  const visibleProfiles = profiles.flatMap((profile, index) => {
+    if (!showOfficialReactions) return [profile];
+
+    const pairedOfficial =
+      officialProfiles.find(
+        (official) => official.pairedCitizenIndex === index + 1,
+      ) ?? officialProfiles[index];
+
+    return pairedOfficial ? [profile, pairedOfficial] : [profile];
+  });
 
   return (
         <section className="mx-auto w-full max-w-[1360px] pb-4">
       <div className="flex items-start justify-between gap-6">
         <div>
           <p className="text-[13px] font-semibold text-brand">시민 시뮬레이션 결과</p>
-          <h1 className="mt-1 text-[28px] font-bold tracking-[-0.025em] text-ink">
-            시민 반응
-          </h1>
+          <div className="mt-1 flex flex-wrap items-center gap-4">
+            <h1 className="text-[28px] font-bold tracking-[-0.025em] text-ink">
+              시민 반응
+            </h1>
+            {officialProfiles.length > 0 && (
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-[10px] border border-line bg-white px-3 py-2 text-[13px] font-medium text-slate transition hover:border-brand/35 hover:text-brand">
+                <input
+                  type="checkbox"
+                  checked={showOfficialReactions}
+                  className="h-4 w-4 cursor-pointer accent-[#29466d]"
+                  onChange={(event) =>
+                    setShowOfficialReactions(event.target.checked)
+                  }
+                />
+                <span>공무원 반응 포함하기</span>
+              </label>
+            )}
+          </div>
         </div>
         {typeof riskScore?.score === "number" && (
           <div className="rounded-[14px] bg-brand-soft px-4 py-3 text-right">
@@ -628,7 +731,7 @@ function PersonaDialogueView({
 
           <div className="mt-7 grid items-start gap-7 xl:grid-cols-[minmax(0,2fr)_1px_minmax(340px,1fr)] xl:gap-8">
         <div className="flex min-w-0 flex-col gap-10">
-          {profiles.map((profile) => (
+          {visibleProfiles.map((profile) => (
             <PersonaConversation key={profile.id} profile={profile} />
           ))}
         </div>
@@ -675,7 +778,9 @@ function PersonaDialogueView({
 
 function SimulationRunScreen({ job }) {
   const citizenResults = job.result?.citizen_results ?? [];
+  const civilServantResults = job.result?.civil_servant_results ?? [];
   const profiles = citizenResults.map(buildCitizenProfile);
+  const officialProfiles = civilServantResults.map(buildCivilServantProfile);
 
   let title = null;
   if (job.status === "completed" && profiles.length === 0) {
@@ -691,6 +796,7 @@ function SimulationRunScreen({ job }) {
           <PersonaDialogueView
             policy={job.policy}
             profiles={profiles}
+            officialProfiles={officialProfiles}
             riskScore={job.result?.risk_score}
             similarPolicies={job.similar_policies}
             similarity={job.similarity}

@@ -14,6 +14,13 @@ class PipelineResultTest(unittest.TestCase):
             "province": "경기",
             "district": "성남시 분당구",
         }
+        civil_servant_persona = {
+            "uuid": "official-1",
+            "occupation": "일반 행정 공무원",
+            "age": 38,
+            "province": "전북",
+            "district": "전주시",
+        }
         citizen_result = {
             "persona_summary": {"이름": "김진훈", "나이": "43"},
             "personality": "현실적인 주거비 부담을 걱정한다.",
@@ -34,7 +41,7 @@ class PipelineResultTest(unittest.TestCase):
             patch.object(
                 pipeline,
                 "get_civil_servant_persona",
-                return_value=[{"uuid": "official-1"}],
+                return_value=[civil_servant_persona],
             ),
             patch.object(
                 pipeline,
@@ -67,6 +74,10 @@ class PipelineResultTest(unittest.TestCase):
             "저는 지원받을 수 없어서 답답합니다.",
         )
         self.assertEqual(result["risk_score"]["score"], 35.0)
+        self.assertEqual(
+            result["civil_servant_results"][0]["persona"],
+            civil_servant_persona,
+        )
 
 
 if __name__ == "__main__":
