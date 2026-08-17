@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { MessageCircle, PencilLine, Upload } from "lucide-react";
 import ChatEmptyState from "../components/ChatEmptyState";
 import SimulationLayout from "../components/SimulationLayout";
+import policyHero from "../assets/images/policy-hero-figma.png";
+import policyHeroCircle from "../assets/images/policy-circle-white.svg";
 
 const ACCEPTED_POLICY_FILES = ".pdf,.docx,.hwp,.hwpx,.txt,.md";
 const SIMULATION_POLL_INTERVAL_MS = 3000;
@@ -464,7 +466,7 @@ function SimulationRunScreen({ job }) {
     (profile) => profile.id === activePersonaId,
   );
 
-  let title = `${policyName} 시뮬레이션을 실행하고 있습니다.`;
+  let title = null;
   if (job.status === "completed" && profiles.length === 0) {
     title = "시뮬레이션은 완료되었지만 생성된 시민 대사가 없습니다.";
   } else if (job.status === "failed") {
@@ -490,7 +492,7 @@ function SimulationRunScreen({ job }) {
             riskScore={job.result?.risk_score}
           />
         ) : (
-          <ChatEmptyState title={title} />
+          title && <ChatEmptyState title={title} />
         )}
       </div>
     </SimulationLayout>
@@ -628,103 +630,122 @@ export default function PolicyPage() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-76px)] bg-[#f6f7fb] px-6">
-      <section className="mx-auto flex max-w-[1040px] flex-col items-center pt-14 text-center sm:pt-20 lg:pt-24">
-        <h1 className="text-[36px] font-bold leading-tight tracking-[-0.035em] text-ink sm:text-[46px]">
-          정책 분석
-        </h1>
-        <p className="mt-3 text-[17px] leading-7 text-slate sm:text-[19px]">
-          분석할 정책 파일을 업로드하거나 정책 내용을 직접 입력하세요.
-        </p>
+    <main className="min-h-[calc(100vh-76px)] bg-[#f6f7fb] lg:h-[calc(100vh-76px)] lg:overflow-hidden">
+      <section className="relative mx-auto grid max-w-[1440px] grid-cols-1 lg:h-full lg:grid-cols-[270px_1fr]">
+        <div className="hidden bg-[#f6f7fb] lg:block" />
 
-        <div
-          className={`mt-9 w-full max-w-[740px] rounded-[24px] border px-5 py-6 transition-colors sm:px-7 sm:py-7 ${
-            isDragging
-              ? "border-brand bg-brand-soft"
-              : "border-[#dde1e8] bg-white"
-          }`}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragOver={(event) => event.preventDefault()}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
-        >
-          <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-            <button
-              type="button"
-              className="flex min-h-[82px] items-center justify-center gap-3 rounded-[16px] bg-brand px-6 text-[17px] font-semibold text-white shadow-[0_8px_18px_rgba(44,74,110,0.18)] transition hover:bg-brand-strong hover:shadow-[0_10px_24px_rgba(44,74,110,0.23)]"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload aria-hidden="true" size={27} strokeWidth={1.8} />
-              정책 파일 업로드
-            </button>
-
-            <button
-              type="button"
-              className="flex min-h-[82px] items-center justify-center gap-3 rounded-[16px] border border-[#cfd6df] bg-white px-6 text-[17px] font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/60"
-              onClick={() => setInputMode("text")}
-            >
-              <PencilLine aria-hidden="true" size={27} strokeWidth={1.8} />
-              정책 직접 입력
-            </button>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_POLICY_FILES}
-            className="sr-only"
-            onChange={(event) => selectFile(event.target.files?.[0])}
-          />
-
-          <p className="mt-4 text-[13px] text-slate">
-            PDF, DOCX, HWP, HWPX, TXT 파일을 끌어다 놓아도 됩니다.
+        <div className="relative z-10 flex flex-col justify-center bg-white px-6 py-10 sm:px-12 lg:h-full lg:py-10 lg:pl-[330px] lg:pr-16">
+          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.03em] text-ink sm:text-[32px] lg:text-[36px]">
+            정책 분석
+          </h1>
+          <p className="mt-2 text-[13px] leading-6 text-slate sm:text-[14px] lg:mt-3 lg:max-w-[460px] lg:text-[15px]">
+            분석할 정책 파일을 업로드하거나 정책 내용을 직접 입력하세요.
           </p>
-        </div>
 
-        {inputMode === "file" && selectedFile && (
-          <div className="mt-5 flex w-full max-w-[740px] flex-col gap-4 rounded-[18px] border border-[#dde1e8] bg-white px-5 py-4 text-left shadow-[0_10px_24px_rgba(20,23,28,0.05)]">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="truncate text-[15px] font-semibold text-ink">
-                  {selectedFile.name}
-                </p>
-                <p className="mt-1 text-[13px] text-slate">
-                  {(selectedFile.size / 1024).toFixed(1)} KB
-                </p>
-              </div>
+          <div
+            className={`mt-6 w-full max-w-[620px] rounded-[20px] border px-4 py-5 transition-colors sm:px-6 sm:py-6 ${
+              isDragging
+                ? "border-brand bg-brand-soft"
+                : "border-[#dde1e8] bg-white"
+            }`}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+          >
+            <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
               <button
                 type="button"
-                disabled={isExtracting}
-                className="shrink-0 rounded-[10px] px-3 py-2 text-[14px] font-medium text-brand transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-[56px] items-center justify-center gap-2 rounded-[13px] bg-brand px-5 text-[14px] font-semibold text-white shadow-[0_8px_18px_rgba(44,74,110,0.18)] transition hover:bg-brand-strong hover:shadow-[0_10px_24px_rgba(44,74,110,0.23)]"
                 onClick={() => fileInputRef.current?.click()}
               >
-                파일 변경
+                <Upload aria-hidden="true" size={19} strokeWidth={1.8} />
+                정책 파일 업로드
+              </button>
+
+              <button
+                type="button"
+                className="flex min-h-[56px] items-center justify-center gap-2 rounded-[13px] border border-[#cfd6df] bg-white px-5 text-[14px] font-semibold text-brand transition hover:border-brand hover:bg-brand-soft/60"
+                onClick={() => setInputMode("text")}
+              >
+                <PencilLine aria-hidden="true" size={19} strokeWidth={1.8} />
+                정책 직접 입력
               </button>
             </div>
 
-            {extractionStatus === "error" && (
-              <p role="alert" className="text-[13px] font-medium text-[#9a342b]">
-                {extractionError}
-              </p>
-            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_POLICY_FILES}
+              className="sr-only"
+              onChange={(event) => selectFile(event.target.files?.[0])}
+            />
 
-            <button
-              type="button"
-              disabled={isExtracting}
-              onClick={extractSelectedFile}
-              className={`flex min-h-[52px] items-center justify-center rounded-[13px] px-6 text-[15px] font-semibold text-white transition ${
-                isExtracting
-                  ? "cursor-not-allowed bg-[#b8c1cc]"
-                  : "bg-brand shadow-[0_8px_18px_rgba(44,74,110,0.18)] hover:bg-brand-strong hover:shadow-[0_10px_22px_rgba(44,74,110,0.23)]"
-              }`}
-            >
-              {isExtracting ? "파일에서 정책 정보를 추출하는 중..." : "파일에서 정책 정보 추출"}
-            </button>
+            <p className="mt-3 text-[12px] text-slate">
+              PDF, DOCX, HWP, HWPX, TXT 파일을 끌어다 놓아도 됩니다.
+            </p>
           </div>
-        )}
+
+          {inputMode === "file" && selectedFile && (
+            <div className="mt-5 flex w-full max-w-[740px] flex-col gap-4 rounded-[18px] border border-[#dde1e8] bg-white px-5 py-4 text-left shadow-[0_10px_24px_rgba(20,23,28,0.05)]">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-semibold text-ink">
+                    {selectedFile.name}
+                  </p>
+                  <p className="mt-1 text-[13px] text-slate">
+                    {(selectedFile.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isExtracting}
+                  className="shrink-0 rounded-[10px] px-3 py-2 text-[14px] font-medium text-brand transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  파일 변경
+                </button>
+              </div>
+
+              {extractionStatus === "error" && (
+                <p role="alert" className="text-[13px] font-medium text-[#9a342b]">
+                  {extractionError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                disabled={isExtracting}
+                onClick={extractSelectedFile}
+                className={`flex min-h-[52px] items-center justify-center rounded-[13px] px-6 text-[15px] font-semibold text-white transition ${
+                  isExtracting
+                    ? "cursor-not-allowed bg-[#b8c1cc]"
+                    : "bg-brand shadow-[0_8px_18px_rgba(44,74,110,0.18)] hover:bg-brand-strong hover:shadow-[0_10px_22px_rgba(44,74,110,0.23)]"
+                }`}
+              >
+                {isExtracting ? "파일에서 정책 정보를 추출하는 중..." : "파일에서 정책 정보 추출"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <img
+          src={policyHeroCircle}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute left-[60px] top-1/2 z-0 hidden h-[480px] w-[480px] -translate-y-1/2 lg:block"
+        />
+        <div className="pointer-events-none absolute left-[80px] top-1/2 z-20 hidden h-[440px] w-[440px] -translate-y-1/2 overflow-hidden rounded-full shadow-[12px_9px_18px_rgba(15,23,42,0.45)] lg:block">
+          <img
+            src={policyHero}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full scale-110 object-cover"
+          />
+        </div>
       </section>
     </main>
   );

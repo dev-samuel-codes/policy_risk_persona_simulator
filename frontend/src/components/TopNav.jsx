@@ -10,23 +10,23 @@ const NAV_ITEMS = [
 export default function TopNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
-      <div className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between px-8">
+      <div className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between pl-8 pr-24">
         <NavLink to="/" className="flex items-center gap-3">
           <img src={logo} alt="Vecho" className="h-6 w-auto" />
-          <span className="hidden text-[13px] leading-tight text-slate md:block">
+          <span className="hidden text-[14px] leading-tight text-slate md:block">
             법과 정책의 <b className="font-semibold text-ink">내일</b>을 미리 그리다,
             <br />
             시민과 함께 준비하는 행정
           </span>
         </NavLink>
 
-        <nav className="flex items-center gap-8">
+        <nav className="flex h-full items-center gap-12 self-stretch">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `relative py-2 text-[17px] font-medium transition-colors ${
+                `relative flex h-full items-center text-[18px] font-medium transition-colors ${
                   isActive ? "text-brand" : "text-ink/70 hover:text-ink"
                 }`
               }
