@@ -1,5 +1,12 @@
-import { useRef, useState } from "react";
-import { MessageCircle, PencilLine, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ChevronDown,
+  PencilLine,
+  Search,
+  Upload,
+  UserRound,
+  X,
+} from "lucide-react";
 import ChatEmptyState from "../components/ChatEmptyState";
 import SimulationLayout from "../components/SimulationLayout";
 import policyHero from "../assets/images/policy-hero-figma.png";
@@ -10,6 +17,7 @@ const SIMULATION_POLL_INTERVAL_MS = 3000;
 const SIMULATION_MAX_POLLS = 600;
 const INPUT_CLASS =
   "mt-2 w-full rounded-[12px] border border-[#d8dde5] bg-white px-4 py-3.5 text-[15px] leading-6 text-ink placeholder:text-slate/55 focus:border-brand focus:outline-none";
+const PROFILE_TRIGGER_STYLE = { outline: "none" };
 
 function PolicyField({
   label,
@@ -234,6 +242,13 @@ function buildCitizenProfile(result, index) {
     sex: summary["성별"] ?? persona.sex,
     note: location || "거주지 정보 없음",
     personality: result.personality ?? persona.persona,
+    livingEnvironment: persona.family_persona,
+    workEnvironment: persona.professional_persona,
+    dailyLife:
+      persona.sports_persona ??
+      persona.arts_persona ??
+      persona.travel_persona ??
+      persona.culinary_persona,
     photo: null,
     result,
   };
@@ -255,7 +270,7 @@ function PolicySummaryCard({ policy }) {
   ].filter(([, value]) => typeof value === "string" && value.trim());
 
   return (
-    <article className="max-h-[680px] overflow-y-auto rounded-[22px] border border-line bg-white p-6 shadow-[0_12px_30px_rgba(20,23,28,0.05)]">
+    <article className="rounded-[20px] border border-line bg-white p-6">
       <p className="text-[13px] font-semibold text-brand">입력된 정책</p>
       <h2 className="mt-2 text-[22px] font-bold leading-snug tracking-[-0.02em] text-ink">
         {policyName}
@@ -281,49 +296,51 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
   const hasPolicies = policies.length > 0;
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] rounded-[22px] border border-line bg-white p-6 shadow-[0_12px_30px_rgba(20,23,28,0.05)]">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <section
+      id="similar-policies-panel"
+      className="rounded-[20px] border border-[#cbd7e4] bg-[#f8fafc] p-5"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[13px] font-semibold text-brand">
-            기존 정책 데이터 기반
-          </p>
-          <h2 className="mt-1 text-[24px] font-bold tracking-[-0.025em] text-ink">
-            유사한 과거 정책
+          <p className="text-[12px] font-semibold text-brand">기존 정책 데이터 기반</p>
+          <h2 className="mt-1 text-[18px] font-bold tracking-[-0.02em] text-ink">
+            유사한 정책
           </h2>
         </div>
         {similarity?.as_of_date && (
-          <p className="text-[12px] text-slate">
-            {similarity.as_of_date} 이전 등록 정책 · {similarity.source_count?.toLocaleString()}건 검색
+          <p className="text-right text-[11px] leading-5 text-slate">
+            {similarity.as_of_date} 이전 등록<br />
+            {similarity.source_count?.toLocaleString()}건 검색
           </p>
         )}
       </div>
 
       {!hasPolicies ? (
-        <p className="mt-5 rounded-[14px] bg-surface px-4 py-4 text-[14px] text-slate">
+        <p className="mt-4 rounded-[14px] bg-white px-4 py-4 text-[13px] leading-5 text-slate">
           기준 이상의 유사 정책을 찾지 못했습니다.
         </p>
       ) : (
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1">
           {policies.map((policy, index) => (
             <article
               key={policy.service_id}
-              className="rounded-[18px] border border-[#dde3ea] bg-[#fbfcfd] p-5"
+              className="rounded-[16px] border border-[#dde3ea] bg-white p-4"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[12px] font-semibold text-brand">
+                  <p className="text-[11px] font-semibold text-brand">
                     유사 정책 {index + 1}
                   </p>
-                  <h3 className="mt-1 text-[18px] font-bold leading-7 text-ink">
+                  <h3 className="mt-1 text-[15px] font-bold leading-6 text-ink">
                     {policy.policy_name}
                   </h3>
-                  <p className="mt-1 text-[12px] text-slate">
+                  <p className="mt-1 text-[11px] leading-5 text-slate">
                     {[policy.organization, policy.registered_at]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-pill bg-brand-soft px-3 py-1.5 text-[13px] font-bold text-brand">
+                <span className="shrink-0 rounded-pill bg-brand-soft px-2.5 py-1 text-[12px] font-bold text-brand">
                   {policy.similarity_score}%
                 </span>
               </div>
@@ -342,9 +359,9 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
               )}
 
               {policy.target_audience && (
-                <div className="mt-4">
+                <div className="mt-3">
                   <p className="text-[11px] font-semibold text-slate">지원 대상</p>
-                  <p className="mt-1 max-h-20 overflow-hidden text-[13px] leading-5 text-ink">
+                  <p className="mt-1 max-h-16 overflow-hidden text-[12px] leading-5 text-ink">
                     {policy.target_audience}
                   </p>
                 </div>
@@ -352,7 +369,7 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
               {policy.benefits && (
                 <div className="mt-3">
                   <p className="text-[11px] font-semibold text-slate">지원 내용</p>
-                  <p className="mt-1 max-h-20 overflow-hidden text-[13px] leading-5 text-ink">
+                  <p className="mt-1 max-h-16 overflow-hidden text-[12px] leading-5 text-ink">
                     {policy.benefits}
                   </p>
                 </div>
@@ -376,17 +393,222 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
   );
 }
 
-function PersonaDialogueView({ policy, profile, riskScore }) {
-  const complaints = profile.result?.complaints ?? [];
+function DialogueAvatar({ profile }) {
+  return (
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#d9e2ed] bg-brand-soft shadow-[0_6px_18px_rgba(44,74,110,0.12)] sm:h-16 sm:w-16">
+      {profile.photo ? (
+        <img
+          src={profile.photo}
+          alt={`${profile.name} 프로필`}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <UserRound
+          aria-hidden="true"
+          className="h-7 w-7 text-brand/70 sm:h-8 sm:w-8"
+          strokeWidth={1.7}
+        />
+      )}
+    </div>
+  );
+}
+
+function PersonaProfile({ profile, children }) {
+  const containerRef = useRef(null);
+  const [isHovering, setIsHovering] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const isOpen = isHovering || isPinned;
+  const popoverId = `persona-profile-${profile.id}`;
   const profileSummary = [
     profile.age ? `${profile.age}세` : null,
     profile.job,
   ]
     .filter(Boolean)
     .join(" · ");
+  const narrativeDetails = [
+    ["성격 및 배경", profile.personality],
+    ["생활 환경", profile.livingEnvironment],
+    ["직업 환경", profile.workEnvironment],
+    ["일상 생활", profile.dailyLife],
+  ].filter(([, value]) => typeof value === "string" && value.trim());
+
+  useEffect(() => {
+    if (!isPinned) return undefined;
+
+    const closeOnOutsidePointer = (event) => {
+      if (!containerRef.current?.contains(event.target)) {
+        setIsPinned(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setIsPinned(false);
+        setIsHovering(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isPinned]);
 
   return (
-    <section className="mx-auto w-full max-w-[1120px] pb-4">
+    <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+      <div
+        ref={containerRef}
+        className="relative shrink-0"
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
+        <button
+          type="button"
+          aria-label={`${profile.name} 프로필 보기`}
+          aria-expanded={isOpen}
+          aria-controls={popoverId}
+          aria-haspopup="dialog"
+          aria-pressed={isPinned}
+          title="프로필 자세히 보기"
+          className="group rounded-full border-0 bg-transparent p-0"
+          style={PROFILE_TRIGGER_STYLE}
+          onClick={() => setIsPinned((isSelected) => !isSelected)}
+        >
+          <div className="rounded-full transition group-hover:ring-4 group-hover:ring-brand-soft group-focus-visible:ring-4 group-focus-visible:ring-brand-soft">
+            <DialogueAvatar profile={profile} />
+          </div>
+        </button>
+
+        {isOpen && (
+          <div
+            id={popoverId}
+            role="dialog"
+            aria-label={`${profile.name} 상세 프로필`}
+            className="absolute left-0 top-full z-50 w-[min(420px,calc(100vw-40px))] pt-2"
+          >
+            <section className="max-h-[70vh] overflow-y-auto rounded-[20px] border border-[#dbe2ea] bg-white p-5 shadow-[0_18px_48px_rgba(20,23,28,0.16)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[12px] font-semibold text-brand">시민 프로필</p>
+                  <h3 className="mt-1 text-[20px] font-bold text-ink">
+                    {profile.name}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  aria-label="프로필 닫기"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate transition hover:bg-surface hover:text-ink focus:outline-none focus:ring-2 focus:ring-brand/20"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setIsPinned(false);
+                    setIsHovering(false);
+                  }}
+                >
+                  <X aria-hidden="true" size={17} strokeWidth={1.8} />
+                </button>
+              </div>
+
+              <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4 border-y border-line py-4 text-[13px]">
+                <div>
+                  <dt className="text-[11px] font-semibold text-slate">거주지</dt>
+                  <dd className="mt-1 font-medium text-ink">{profile.note}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold text-slate">나이 · 성별</dt>
+                  <dd className="mt-1 font-medium text-ink">
+                    {[profile.age ? `${profile.age}세` : null, profile.sex]
+                      .filter(Boolean)
+                      .join(" · ") || "정보 없음"}
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-[11px] font-semibold text-slate">직업</dt>
+                  <dd className="mt-1 font-medium text-ink">{profile.job}</dd>
+                </div>
+              </dl>
+
+              {narrativeDetails.length > 0 && (
+                <dl className="mt-4 flex flex-col gap-4">
+                  {narrativeDetails.map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[11px] font-semibold text-brand">{label}</dt>
+                      <dd className="mt-1 text-[12px] leading-5 text-slate">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 className="text-[21px] font-bold text-ink">{profile.name}</h2>
+          <span className="rounded-pill bg-surface px-3 py-1 text-[12px] text-slate">
+            {profileSummary}
+          </span>
+          <span className="rounded-pill bg-surface px-3 py-1 text-[12px] text-slate">
+            {profile.note}
+          </span>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function PersonaConversation({ profile }) {
+  const complaints = profile.result?.complaints ?? [];
+
+  return (
+    <article className="min-w-0 pb-10 last:pb-0">
+      <PersonaProfile profile={profile}>
+        <div className="mt-2 flex flex-col gap-4">
+          {complaints.length > 0 ? (
+            complaints.map((complaint, index) => (
+              <div
+                key={`${profile.id}-complaint-${index + 1}`}
+                className="rounded-[26px] rounded-tl-[10px] border border-[#edf0f4] bg-white px-5 py-4 shadow-[0_12px_30px_rgba(20,23,28,0.07)] sm:px-6 sm:py-5"
+              >
+                <p className="text-[12px] font-semibold text-brand">
+                  {profile.name} · 반응 {index + 1}
+                </p>
+                <blockquote className="mt-2 whitespace-pre-line text-[16px] font-medium leading-7 text-ink sm:text-[17px] sm:leading-8">
+                  {complaint.dialogue}
+                </blockquote>
+                {complaint.complaint_text && (
+                  <p className="mt-3 border-t border-line pt-3 text-[12px] leading-5 text-slate sm:text-[13px]">
+                    {complaint.complaint_text}
+                  </p>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="rounded-[26px] rounded-tl-[10px] border border-[#edf0f4] bg-white px-6 py-5 text-[14px] leading-6 text-slate shadow-[0_12px_30px_rgba(20,23,28,0.07)]">
+              생성된 시민 대사가 없습니다.
+            </p>
+          )}
+        </div>
+      </PersonaProfile>
+    </article>
+  );
+}
+
+function PersonaDialogueView({
+  policy,
+  profiles,
+  riskScore,
+  similarPolicies,
+  similarity,
+}) {
+  const [showSimilarPolicies, setShowSimilarPolicies] = useState(false);
+
+  return (
+        <section className="mx-auto w-full max-w-[1360px] pb-4">
       <div className="flex items-start justify-between gap-6">
         <div>
           <p className="text-[13px] font-semibold text-brand">시민 시뮬레이션 결과</p>
@@ -404,67 +626,56 @@ function PersonaDialogueView({ policy, profile, riskScore }) {
         )}
       </div>
 
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <PolicySummaryCard policy={policy} />
+          <div className="mt-7 grid items-start gap-7 xl:grid-cols-[minmax(0,2fr)_1px_minmax(340px,1fr)] xl:gap-8">
+        <div className="flex min-w-0 flex-col gap-10">
+          {profiles.map((profile) => (
+            <PersonaConversation key={profile.id} profile={profile} />
+          ))}
+        </div>
 
-        <article className="rounded-[22px] border border-line bg-white p-7 shadow-[0_12px_30px_rgba(20,23,28,0.05)]">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h2 className="text-[21px] font-bold text-ink">{profile.name}</h2>
-            <span className="rounded-pill bg-surface px-3 py-1 text-[12px] text-slate">
-              {profileSummary}
-            </span>
-            <span className="rounded-pill bg-surface px-3 py-1 text-[12px] text-slate">
-              {profile.note}
-            </span>
-          </div>
+        <div aria-hidden="true" className="hidden h-full min-h-[520px] bg-line xl:block" />
 
-          {profile.personality && (
-            <p className="mt-4 rounded-[14px] bg-[#f7f8fa] px-4 py-3 text-[14px] leading-6 text-slate">
-              {profile.personality}
-            </p>
+        <aside className="min-w-0 border-t border-line pt-7 xl:sticky xl:top-6 xl:border-t-0 xl:pt-0">
+          <button
+            type="button"
+            aria-expanded={showSimilarPolicies}
+            aria-controls="similar-policies-panel"
+            className="flex w-full items-center justify-between gap-4 rounded-[16px] border border-brand/25 bg-brand-soft/65 px-4 py-3.5 text-left text-[14px] font-semibold text-brand transition hover:border-brand/50 hover:bg-brand-soft focus:outline-none focus:ring-2 focus:ring-brand/20"
+            onClick={() => setShowSimilarPolicies((isOpen) => !isOpen)}
+          >
+            <span className="flex items-center gap-2.5">
+              <Search aria-hidden="true" size={18} strokeWidth={1.8} />
+              유사한 정책 찾아보기
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              size={18}
+              strokeWidth={1.8}
+              className={`transition-transform ${showSimilarPolicies ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {showSimilarPolicies && (
+            <div className="mt-3">
+              <SimilarPoliciesPanel
+                policies={similarPolicies}
+                similarity={similarity}
+              />
+            </div>
           )}
 
-          <div className="mt-6 flex flex-col gap-4">
-            {complaints.map((complaint, index) => (
-              <div
-                key={`${profile.id}-complaint-${index + 1}`}
-                className="rounded-[18px] border border-[#dde3ea] bg-white p-5"
-              >
-                <div className="flex items-center gap-2 text-[13px] font-semibold text-brand">
-                  <MessageCircle aria-hidden="true" size={17} strokeWidth={1.8} />
-                  민원 대사 {index + 1}
-                </div>
-                <blockquote className="mt-3 text-[17px] font-medium leading-8 text-ink">
-                  “{complaint.dialogue}”
-                </blockquote>
-                {complaint.complaint_text && (
-                  <p className="mt-3 border-t border-line pt-3 text-[13px] leading-5 text-slate">
-                    {complaint.complaint_text}
-                  </p>
-                )}
-              </div>
-            ))}
+          <div className="mt-4 max-h-[calc(100vh-220px)] overflow-y-auto">
+            <PolicySummaryCard policy={policy} />
           </div>
-        </article>
+        </aside>
       </div>
     </section>
   );
 }
 
 function SimulationRunScreen({ job }) {
-  const [selectedPersonaId, setSelectedPersonaId] = useState(null);
-  const policyName =
-    job.policy?.상세정보?.서비스명 ?? job.policy?.목록정보?.서비스명 ?? "입력한 정책";
   const citizenResults = job.result?.citizen_results ?? [];
   const profiles = citizenResults.map(buildCitizenProfile);
-  const activePersonaId = profiles.some(
-    (profile) => profile.id === selectedPersonaId,
-  )
-    ? selectedPersonaId
-    : profiles[0]?.id;
-  const activeProfile = profiles.find(
-    (profile) => profile.id === activePersonaId,
-  );
 
   let title = null;
   if (job.status === "completed" && profiles.length === 0) {
@@ -474,22 +685,15 @@ function SimulationRunScreen({ job }) {
   }
 
   return (
-    <SimulationLayout
-      placeholder="분석할 정책안을 입력하시오."
-      personas={profiles.length > 0 ? profiles : undefined}
-      selectedPersonaId={activePersonaId}
-      onSelectPersona={setSelectedPersonaId}
-    >
-      <div className="flex flex-col gap-8">
-        <SimilarPoliciesPanel
-          policies={job.similar_policies}
-          similarity={job.similarity}
-        />
-        {job.status === "completed" && activeProfile ? (
+    <SimulationLayout showSidebar={false}>
+      <div>
+        {job.status === "completed" && profiles.length > 0 ? (
           <PersonaDialogueView
             policy={job.policy}
-            profile={activeProfile}
+            profiles={profiles}
             riskScore={job.result?.risk_score}
+            similarPolicies={job.similar_policies}
+            similarity={job.similarity}
           />
         ) : (
           title && <ChatEmptyState title={title} />
