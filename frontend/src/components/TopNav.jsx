@@ -10,7 +10,7 @@ const NAV_ITEMS = [
 export default function TopNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/95 backdrop-blur">
-      <div className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between pl-8 pr-24">
+      <div className="flex h-[76px] w-full items-center justify-between px-5 sm:px-8 lg:px-10">
         <NavLink to="/" className="flex items-center gap-3">
           <img src={logo} alt="Vecho" className="h-6 w-auto" />
           <span className="hidden text-[14px] leading-tight text-slate md:block">

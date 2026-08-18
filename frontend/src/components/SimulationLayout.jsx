@@ -8,7 +8,7 @@ export default function SimulationLayout({
   children,
 }) {
   return (
-    <div className="mx-auto flex max-w-[1440px]">
+    <div className="flex w-full">
       {showSidebar && (
         <PersonaSidebar
           personas={personas}

@@ -696,7 +696,7 @@ function PersonaDialogueView({
   });
 
   return (
-        <section className="mx-auto w-full max-w-[1360px] pb-4">
+        <section className="w-full pb-4">
       <div className="flex items-start justify-between gap-6">
         <div>
           <p className="text-[13px] font-semibold text-brand">시민 시뮬레이션 결과</p>
