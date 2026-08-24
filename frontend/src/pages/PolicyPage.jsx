@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import ChatEmptyState from "../components/ChatEmptyState";
 import SimulationLayout from "../components/SimulationLayout";
+import SimulationLoadingScreen from "../components/SimulationLoadingScreen";
 import policyHero from "../assets/images/policy-hero-figma.png";
 import policyHeroCircle from "../assets/images/policy-circle-white.svg";
 
@@ -436,7 +437,7 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
               )}
 
               {policy.source_url && (
-                <a
+                
                   href={policy.source_url}
                   target="_blank"
                   rel="noreferrer"
@@ -661,6 +662,34 @@ function PersonaConversation({ profile }) {
                     {complaint.complaint_text}
                   </p>
                 )}
+                {complaint.real_precedents?.length > 0 && (
+                  <div className="mt-3 rounded-[16px] bg-[#f7f8fa] px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[11px] font-semibold text-slate">
+                        실제 유사 민원 발견
+                      </p>
+                      <span className="rounded-pill bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand">
+                        {complaint.real_precedents[0].similarity_score}% 일치
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[13px] font-semibold text-ink">
+                      {complaint.real_precedents[0].title}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-slate">
+                      {[
+                        complaint.real_precedents[0].organization,
+                        complaint.real_precedents[0].registered_at,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {complaint.real_precedents[0].related_laws && (
+                      <p className="mt-1 text-[11px] leading-5 text-slate/80">
+                        {complaint.real_precedents[0].related_laws}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           ) : (
@@ -679,6 +708,7 @@ function PersonaDialogueView({
   profiles,
   officialProfiles,
   riskScore,
+  realismCheck,
   similarPolicies,
   similarity,
 }) {
@@ -719,14 +749,28 @@ function PersonaDialogueView({
             )}
           </div>
         </div>
-        {typeof riskScore?.score === "number" && (
-          <div className="rounded-[14px] bg-brand-soft px-4 py-3 text-right">
-            <p className="text-[11px] font-medium text-slate">정책 민원 리스크</p>
-            <p className="mt-0.5 text-[20px] font-bold text-brand">
-              {riskScore.score}점
-            </p>
-          </div>
-        )}
+        <div className="flex items-start gap-3">
+          {typeof riskScore?.score === "number" && (
+            <div className="rounded-[14px] bg-brand-soft px-4 py-3 text-right">
+              <p className="text-[11px] font-medium text-slate">정책 민원 리스크</p>
+              <p className="mt-0.5 text-[20px] font-bold text-brand">
+                {riskScore.score}점
+              </p>
+            </div>
+          )}
+          {typeof realismCheck?.match_rate === "number" && (
+            <div
+              className="rounded-[14px] bg-[#f0f4f9] px-4 py-3 text-right"
+              title={`생성된 민원 ${realismCheck.total_complaints}건 중 ${realismCheck.matched_with_real_precedent}건이 실제 민원과 ${realismCheck.min_score_threshold}% 이상 유사`}
+            >
+              <p className="text-[11px] font-medium text-slate">생성 민원 현실성</p>
+              <p className="mt-0.5 text-[20px] font-bold text-ink">
+                {realismCheck.match_rate}%
+              </p>
+              <p className="text-[10px] text-slate">실제 민원과 매칭</p>
+            </div>
+          )}
+        </div>
       </div>
 
           <div className="mt-7 grid items-start gap-7 xl:grid-cols-[minmax(0,2fr)_1px_minmax(340px,1fr)] xl:gap-8">
@@ -782,6 +826,8 @@ function SimulationRunScreen({ job }) {
   const profiles = citizenResults.map(buildCitizenProfile);
   const officialProfiles = civilServantResults.map(buildCivilServantProfile);
 
+  const isFinished = job.status === "completed" || job.status === "failed";
+
   let title = null;
   if (job.status === "completed" && profiles.length === 0) {
     title = "시뮬레이션은 완료되었지만 생성된 시민 대사가 없습니다.";
@@ -798,9 +844,12 @@ function SimulationRunScreen({ job }) {
             profiles={profiles}
             officialProfiles={officialProfiles}
             riskScore={job.result?.risk_score}
+            realismCheck={job.result?.realism_check}
             similarPolicies={job.similar_policies}
             similarity={job.similarity}
           />
+        ) : !isFinished ? (
+          <SimulationLoadingScreen status={job.status} />
         ) : (
           title && <ChatEmptyState title={title} />
         )}
