@@ -437,7 +437,7 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
               )}
 
               {policy.source_url && (
-                
+                <a
                   href={policy.source_url}
                   target="_blank"
                   rel="noreferrer"
