@@ -1,8 +1,6 @@
 from pathlib import Path
-from typing import Any
 import shutil
 
-import pandas as pd
 from huggingface_hub import snapshot_download
 
 
@@ -110,20 +108,3 @@ def get_local_parquet_files(auto_download: bool = True) -> list[Path]:
         dataset_dir = LOCAL_DIR
 
     return sorted(dataset_dir.glob("*.parquet"))
-
-
-# 로컬 parquet 파일에서 사용할 페르소나 가져오기
-def get_persona(limit: int = 10) -> list[dict[str, Any]]:
-    personas: list[dict[str, Any]] = []
-
-    for parquet_file in get_local_parquet_files():
-        dataframe = pd.read_parquet(parquet_file)
-
-        for persona in dataframe.to_dict(orient="records"):
-            persona_record = {str(key): value for key, value in persona.items()}
-            personas.append(persona_record)
-
-            if len(personas) >= limit:
-                return personas
-
-    return personas

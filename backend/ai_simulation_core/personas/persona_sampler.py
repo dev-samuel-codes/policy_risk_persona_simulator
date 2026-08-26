@@ -27,6 +27,20 @@ PERSONA_COLUMNS = [
     "family_persona",
     "persona",
 ]
+INACTIVE_CIVIL_SERVANT_MARKERS = ("전직", "퇴직", "은퇴", "구직")
+
+
+def is_active_civil_servant_occupation(
+    occupation: object,
+    *,
+    keyword: str = "공무원",
+) -> bool:
+    normalized = str(occupation or "").strip()
+    return bool(
+        normalized
+        and keyword in normalized
+        and not any(marker in normalized for marker in INACTIVE_CIVIL_SERVANT_MARKERS)
+    )
 
 
 # pandas / numpy 값을 일반 Python 값으로 변환
@@ -99,8 +113,14 @@ def get_civil_servant_persona(
             columns=available_columns,
         )
 
+        occupation_series = df["occupation"].fillna("").astype(str)
         matched_df = df[
-            df["occupation"].fillna("").astype(str).str.contains(keyword, regex=False)
+            occupation_series.map(
+                lambda occupation: is_active_civil_servant_occupation(
+                    occupation,
+                    keyword=keyword,
+                )
+            )
         ]
 
         if min_age is not None:
