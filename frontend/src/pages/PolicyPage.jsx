@@ -8,10 +8,7 @@ import {
   X,
 } from "lucide-react";
 import ChatEmptyState from "../components/ChatEmptyState";
-import {
-  ComplaintReferenceCard,
-  ComplaintReferenceSummary,
-} from "../components/policy/ComplaintReferenceCard";
+import { ComplaintReferenceCard } from "../components/policy/ComplaintReferenceCard";
 import PersonaSelectionStep from "../components/policy/PersonaSelectionStep";
 import SimulationLoadingScreen from "../components/SimulationLoadingScreen";
 import policyHero from "../assets/images/policy-hero-figma.png";
@@ -665,7 +662,6 @@ function PersonaDialogueView({
   policy,
   profiles,
   officialProfiles,
-  complaintReferenceSummary,
   similarPolicies,
   similarity,
 }) {
@@ -709,7 +705,6 @@ function PersonaDialogueView({
             선택한 합성 페르소나 3명 기준 · 실제 인구 예측 아님
           </p>
         </div>
-        <ComplaintReferenceSummary summary={complaintReferenceSummary} />
       </div>
 
       <div className="mt-7 grid items-start gap-7 xl:grid-cols-[minmax(0,2fr)_1px_minmax(340px,1fr)] xl:gap-8">
@@ -782,9 +777,6 @@ function SimulationRunScreen({ job }) {
             policy={job.policy}
             profiles={profiles}
             officialProfiles={officialProfiles}
-            complaintReferenceSummary={
-              job.result?.complaint_reference_summary
-            }
             similarPolicies={job.similar_policies}
             similarity={job.similarity}
           />

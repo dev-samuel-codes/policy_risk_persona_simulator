@@ -31,7 +31,6 @@ function isConfirmedEvidence(item) {
     item.verified === false
   );
 }
-
 function formatDetailText(detail) {
   const values = Array.isArray(detail) ? detail : [detail];
 
@@ -284,69 +283,5 @@ export function ComplaintReferenceCard({ complaint }) {
         검색 유사도 점수는 동일 민원 판정이나 발생 가능성을 뜻하지 않습니다.
       </p>
     </article>
-  );
-}
-
-function summaryValue(summary, keys) {
-  return firstPresentValue(summary, keys);
-}
-
-export function ComplaintReferenceSummary({ summary }) {
-  if (!summary) return null;
-
-  const matched = summaryValue(summary, [
-    "matched",
-    "matched_count",
-    "matched_complaints",
-    "matched_with_reference_case",
-  ]);
-  const total = summaryValue(summary, [
-    "total",
-    "total_count",
-    "total_complaints",
-    "searched_complaints",
-  ]);
-  const unavailableCount = summaryValue(summary, [
-    "unavailable",
-    "unavailable_count",
-    "search_unavailable_count",
-  ]);
-  const invalidCount = summaryValue(summary, ["invalid", "invalid_count"]);
-  const status = summary.status ?? summary.search_status;
-  const isUnavailable = status === "unavailable";
-  const hasOnlyInvalidQueries =
-    typeof total === "number" &&
-    total > 0 &&
-    typeof invalidCount === "number" &&
-    invalidCount === total;
-  const isPartial =
-    status === "partial" ||
-    status === "partially_unavailable" ||
-    (typeof unavailableCount === "number" && unavailableCount > 0);
-
-  let value = "검색 불가";
-  if (hasOnlyInvalidQueries) {
-    value = "검색 대상 없음";
-  } else if (isUnavailable) {
-    value = "검색 불가";
-  } else if (isPartial) {
-    value = "일부 검색";
-  } else if (matched !== null && total !== null) {
-    value = `${matched}/${total}건`;
-  }
-  const detail = hasOnlyInvalidQueries
-    ? "민원 요약이 부족해 참고 사례를 검색하지 않음"
-    : isPartial && matched !== null && total !== null
-      ? `${matched}/${total}건 연결 · 조건 검증을 통과한 공개 Q&A 사례`
-      : "조건 검증을 통과한 공개 Q&A 사례";
-
-  return (
-    <div className="rounded-[14px] bg-[#f0f4f9] px-4 py-3 text-right">
-      <p className="text-[11px] font-medium text-slate">참고사례 연결</p>
-      <p className="mt-0.5 text-[20px] font-bold text-ink">{value}</p>
-      <p className="max-w-[180px] text-[10px] leading-4 text-slate">
-        {detail}
-      </p>
-    </div>
   );
 }
