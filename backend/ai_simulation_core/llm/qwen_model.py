@@ -17,6 +17,11 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
+QWEN_MODEL_NAME = "Qwen/Qwen3-8B"
+CUDA_MAX_MEMORY = "9GiB"
+CPU_MAX_MEMORY = "22GiB"
+
+
 # LLM을 로컬에서 실행하기 위한 클래스
 class LLM:
     # 윈도우, 맥에서 mps, cpu, gpu 구분
@@ -32,18 +37,31 @@ class LLM:
     # 클래스 초기화: LLM 객체를 만들 때 자동으로 실행
     def __init__(self) -> None:
 
-        self.model_name = "Qwen/Qwen3-4B-Instruct-2507"
+        self.model_name = QWEN_MODEL_NAME
         self.device = self.get_device()
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        # 모델 로드
+        # Qwen3-8B의 원본 BF16 정밀도를 유지한다. RTX 5070 12GB에는 전체
+        # 가중치가 들어가지 않으므로 일부 레이어와 버퍼만 CPU에 분산한다.
+        model_kwargs: dict[str, Any] = {"torch_dtype": "auto"}
+        if self.device.type == "cuda":
+            model_kwargs.update(
+                {
+                    "torch_dtype": torch.bfloat16,
+                    "device_map": "auto",
+                    "max_memory": {0: CUDA_MAX_MEMORY, "cpu": CPU_MAX_MEMORY},
+                    "offload_buffers": True,
+                }
+            )
+
         self.model: Any = AutoModelForCausalLM.from_pretrained(
             self.model_name,
-            torch_dtype="auto",  # float32: 정확도 좋음, 메모리 많이 사용 / float16: 메모리 적게 사용 / bfloat16: 일부 환경에서 효율적
+            **model_kwargs,
         )
 
-        self.model.to(self.device)
+        if self.device.type != "cuda":
+            self.model.to(self.device)
         self.model.eval()
         self._closed = False
 
@@ -83,9 +101,8 @@ class LLM:
             generated_ids = self.model.generate(
                 **model_inputs,
                 max_new_tokens=1024,  # 새로 생성할 수 있는 최대 토큰 수
-                do_sample=True,  # 답변 생성 시 항상 가장 높은 단어를 고를지 또는 확률적으로 샘플링 할지
-                temperature=0.7,  # 창의성 또는 랜덤성 조절: 0.7은 균형 잡힌 값, 낮으면 안정적 및 보수적
-                top_p=0.9,  # 확률이 높은 후보들을 누적 확률를 선택
+                # 사실 검증이 필요한 구조화 JSON이므로 확률 샘플링을 사용하지 않는다.
+                do_sample=False,
             )
 
         # 입력 프롬프트 부분 제거
