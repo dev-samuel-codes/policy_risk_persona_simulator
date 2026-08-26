@@ -77,7 +77,7 @@ class PipelineLifecycleTests(unittest.TestCase):
     def test_pipeline_unloads_after_success(
         self, run_mock: Mock, unload_mock: Mock
     ) -> None:
-        expected = {"risk_score": {"score": 1}}
+        expected = {"status": "ok"}
         run_mock.return_value = expected
 
         self.assertEqual(pipeline.run_pipeline(), expected)
