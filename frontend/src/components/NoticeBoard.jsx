@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, Scale, ArrowRight } from "lucide-react";
+import { FileText, ArrowRight } from "lucide-react";
 
 const ENTRIES = [
   {
@@ -10,15 +10,6 @@ const ENTRIES = [
     examples: ["청년 월세 지원", "1인 가구 특별공급", "기초연금 수급"],
     accent: "var(--color-accent-teal)",
     accentSoft: "var(--color-accent-teal-soft)",
-  },
-  {
-    to: "/law",
-    Icon: Scale,
-    label: "법령 분석",
-    detail: "법률안 조문이 어떤 계층에 어떻게 적용되는지 시뮬레이션합니다.",
-    examples: ["주거안정 지원법", "기초연금법 시행령"],
-    accent: "var(--color-accent-indigo)",
-    accentSoft: "var(--color-accent-indigo-soft)",
   },
 ];
 

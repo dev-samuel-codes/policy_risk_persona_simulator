@@ -11,9 +11,9 @@ export default function SiteIntro() {
           생길 문제를 먼저 시뮬레이션합니다.
         </h1>
         <p className="mt-5 max-w-[440px] text-[14px] leading-[1.75] text-slate">
-          CivicEcho는 정책·법령 문서와 인구 통계를 바탕으로 가상의 시민 페르소나를
+          CivicEcho는 정책 문서와 인구 통계를 바탕으로 가상의 시민 페르소나를
           생성하고, 각 조항이 서로 다른 계층에 어떻게 적용되는지를 시뮬레이션해
-          예상 민원을 리스크 지표로 정리합니다.
+          예상 민원과 정책 적용 사각지대를 정리합니다.
         </p>
 
         <dl className="mt-7 flex flex-col gap-3 border-t border-line pt-6">
@@ -56,8 +56,8 @@ const PIPELINE_STEPS = [
   },
   {
     n: "03",
-    label: "리스크 지표 산출",
-    detail: "조항별 민원 발생 가능성을 수치화",
+    label: "근거·참고사례 확인",
+    detail: "예상 민원과 공개 Q&A 참고사례 연결",
   },
 ];
 

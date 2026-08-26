@@ -11,15 +11,8 @@ const STEPS = [
   { label: "유사 정책·민원 검색", detail: "기존 정책과 민원 사례를 대조합니다", until: 20 },
   { label: "시민 페르소나 선정", detail: "정책 대상에 맞는 인물을 고릅니다", until: 32 },
   { label: "시민 반응 생성", detail: "페르소나별 반응을 만들고 있습니다", until: 85 },
-  { label: "민원 리스크 산출", detail: "조항별 위험도를 계산합니다", until: 100 },
+  { label: "결과 검증", detail: "생성된 반응과 근거를 확인합니다", until: 100 },
 ];
-
-function formatElapsed(totalMs) {
-  const totalSeconds = Math.floor(totalMs / 1000);
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
 
 function SkeletonPersonaCard({ delayMs = 0 }) {
   const pulse = { animationDelay: `${delayMs}ms` };
@@ -96,7 +89,7 @@ export default function SimulationLoadingScreen({ status = "running" }) {
       aria-live="polite"
     >
       {/* 상단 헤더 */}
-      <div className="flex flex-wrap items-start justify-between gap-6">
+      <div>
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-brand">시민 시뮬레이션 진행 중</p>
           <h1 className="mt-1 flex items-center gap-3 text-[28px] font-bold tracking-[-0.025em] text-ink">
@@ -112,13 +105,6 @@ export default function SimulationLoadingScreen({ status = "running" }) {
             </span>
           </h1>
           <p className="mt-2 text-[14px] leading-6 text-slate">{activeStep.detail}</p>
-        </div>
-
-        <div className="rounded-[14px] bg-brand-soft px-4 py-3 text-right">
-          <p className="text-[11px] font-medium text-slate">경과 시간</p>
-          <p className="mt-0.5 font-mono text-[20px] font-bold tabular-nums text-brand">
-            {formatElapsed(elapsedMs)}
-          </p>
         </div>
       </div>
 

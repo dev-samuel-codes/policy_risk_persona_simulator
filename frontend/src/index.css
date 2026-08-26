@@ -17,8 +17,7 @@
   /* Type */
   --font-gov: "Pretendard GOV Variable", "Pretendard", -apple-system, sans-serif;
 
-  /* Color — Civic / 공공 톤. 리스크 등급 색(danger/caution/safe)은
-     brand 색과 절대 겹치지 않도록 분리해 둔다. */
+  /* Color — Civic / 공공 톤 */
   --color-ink: #14171c;       /* 본문 텍스트 */
   --color-slate: #5b6472;     /* 보조 텍스트 */
   --color-paper: #ffffff;     /* 배경 (완전한 흰색 대신 아주 옅은 웜톤) */
@@ -28,17 +27,10 @@
   --color-brand-strong: #1c324e;
   --color-brand-soft: #e9eef3;
 
-  /* 리스크 등급 전용 색 — 다른 용도로 절대 재사용하지 않음 */
-  --color-risk-danger: #b3392c;
-  --color-risk-caution: #a8791c;
- --color-accent-teal: #2f6f6a;
+  --color-accent-teal: #2f6f6a;
   --color-accent-teal-soft: #e7f0ef;
-  --color-accent-indigo: #46508f;
-  --color-accent-indigo-soft: #ecedf6;
-  --color-accent-sand: #8a6b2f;
-  --color-accent-sand-soft: #f3ecdd;
 
-  --radius-card: 28px;;
+  --radius-card: 28px;
   --radius-pill: 999px;
 }
 

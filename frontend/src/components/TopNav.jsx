@@ -3,7 +3,6 @@ import logo from "../assets/images/logo.svg";
 
 const NAV_ITEMS = [
   { to: "/policy", label: "정책" },
-  { to: "/law", label: "법령" },
   { to: "/about", label: "소개" },
 ];
 
@@ -14,7 +13,7 @@ export default function TopNav() {
         <NavLink to="/" className="flex items-center gap-3">
           <img src={logo} alt="Vecho" className="h-6 w-auto" />
           <span className="hidden text-[14px] leading-tight text-slate md:block">
-            법과 정책의 <b className="font-semibold text-ink">내일</b>을 미리 그리다,
+            정책의 <b className="font-semibold text-ink">내일</b>을 미리 그리다,
             <br />
             시민과 함께 준비하는 행정
           </span>

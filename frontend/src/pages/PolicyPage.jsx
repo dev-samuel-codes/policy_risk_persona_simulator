@@ -8,12 +8,16 @@ import {
   X,
 } from "lucide-react";
 import ChatEmptyState from "../components/ChatEmptyState";
-import SimulationLayout from "../components/SimulationLayout";
+import {
+  ComplaintReferenceCard,
+  ComplaintReferenceSummary,
+} from "../components/policy/ComplaintReferenceCard";
+import PersonaSelectionStep from "../components/policy/PersonaSelectionStep";
 import SimulationLoadingScreen from "../components/SimulationLoadingScreen";
 import policyHero from "../assets/images/policy-hero-figma.png";
 import policyHeroCircle from "../assets/images/policy-circle-white.svg";
 
-const ACCEPTED_POLICY_FILES = ".pdf,.docx,.hwp,.hwpx,.txt,.md";
+const ACCEPTED_POLICY_FILES = ".pdf,.docx,.hwpx,.txt,.md";
 const SIMULATION_POLL_INTERVAL_MS = 3000;
 const SIMULATION_MAX_POLLS = 600;
 const INPUT_CLASS =
@@ -57,7 +61,7 @@ function PolicyField({
 }
 
 function DirectPolicyForm({
-  onSimulationStarted,
+  onDraftReady,
   initialValues,
   heading = "정책 직접 입력",
   subheading,
@@ -66,50 +70,17 @@ function DirectPolicyForm({
   const [canSubmit, setCanSubmit] = useState(
     Boolean(values.policy_name?.trim() && values.benefits?.trim()),
   );
-  const [submissionState, setSubmissionState] = useState("idle");
-  const [submissionError, setSubmissionError] = useState("");
-  const isSubmitting = submissionState === "submitting";
 
   const updateRequiredState = (form) => {
     const policyName = form.elements.namedItem("policy_name")?.value.trim();
     const benefits = form.elements.namedItem("benefits")?.value.trim();
     setCanSubmit(Boolean(policyName && benefits));
-    setSubmissionState("idle");
-    setSubmissionError("");
   };
 
-  const submitPolicy = async (event) => {
+  const submitPolicy = (event) => {
     event.preventDefault();
-    if (!canSubmit || isSubmitting) return;
-
-    setSubmissionState("submitting");
-    setSubmissionError("");
-
-    try {
-      const fields = Object.fromEntries(new FormData(event.currentTarget));
-      const response = await fetch("/api/policies/direct", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
-      });
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        const detail = typeof result?.detail === "string" ? result.detail : null;
-        throw new Error(detail ?? "정책 정보를 적용하지 못했습니다.");
-      }
-
-      if (!result?.job_id || !result?.policy) {
-        throw new Error("시뮬레이션 작업 ID를 받지 못했습니다.");
-      }
-
-      onSimulationStarted(result);
-    } catch (error) {
-      setSubmissionState("error");
-      setSubmissionError(
-        error instanceof Error ? error.message : "정책 정보를 적용하지 못했습니다.",
-      );
-    }
+    if (!canSubmit) return;
+    onDraftReady(Object.fromEntries(new FormData(event.currentTarget)));
   };
 
   return (
@@ -126,10 +97,7 @@ function DirectPolicyForm({
           <p className="mt-2 text-[14px] leading-6 text-slate">{subheading}</p>
         )}
 
-        <fieldset
-          disabled={isSubmitting}
-          className="mt-8 grid grid-cols-2 gap-x-6 gap-y-6"
-        >
+        <fieldset className="mt-8 grid grid-cols-2 gap-x-6 gap-y-6">
           <div className="col-span-2">
             <PolicyField
               label="정책명"
@@ -205,21 +173,16 @@ function DirectPolicyForm({
         </fieldset>
 
         <div className="mt-8 flex items-center justify-end gap-5 border-t border-[#e5e8ed] pt-7">
-          {submissionState === "error" && (
-            <p role="alert" className="text-[14px] font-medium text-[#9a342b]">
-              {submissionError}
-            </p>
-          )}
           <button
             type="submit"
-            disabled={!canSubmit || isSubmitting}
+            disabled={!canSubmit}
             className={`min-w-[160px] rounded-[13px] px-7 py-3.5 text-[16px] font-semibold text-white transition ${
-              canSubmit && !isSubmitting
+              canSubmit
                 ? "bg-brand shadow-[0_8px_18px_rgba(44,74,110,0.18)] hover:bg-brand-strong hover:shadow-[0_10px_22px_rgba(44,74,110,0.23)]"
                 : "cursor-not-allowed bg-[#b8c1cc]"
             }`}
           >
-            {isSubmitting ? "적용 중..." : "입력 완료"}
+            다음: 페르소나 선택
           </button>
         </div>
       </form>
@@ -355,6 +318,12 @@ function PolicySummaryCard({ policy }) {
 
 function SimilarPoliciesPanel({ policies = [], similarity }) {
   const hasPolicies = policies.length > 0;
+  const source = similarity?.source;
+  const sourceLabel =
+    source?.api_type === "OpenAPI"
+      ? "정부24 OpenAPI"
+      : "기존 정책 데이터";
+  const fetchedDate = source?.fetched_at?.slice(0, 10);
 
   return (
     <section
@@ -363,14 +332,16 @@ function SimilarPoliciesPanel({ policies = [], similarity }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[12px] font-semibold text-brand">기존 정책 데이터 기반</p>
+          <p className="text-[12px] font-semibold text-brand">{sourceLabel} 기반</p>
           <h2 className="mt-1 text-[18px] font-bold tracking-[-0.02em] text-ink">
             유사한 정책
           </h2>
         </div>
-        {similarity?.as_of_date && (
+        {similarity && (
           <p className="text-right text-[11px] leading-5 text-slate">
-            {similarity.as_of_date} 이전 등록<br />
+            {fetchedDate ? `${fetchedDate} OpenAPI 수집` : sourceLabel}
+            <br />
+            {similarity.as_of_date ? `${similarity.as_of_date} 이전 등록 · ` : ""}
             {similarity.source_count?.toLocaleString()}건 검색
           </p>
         )}
@@ -633,6 +604,20 @@ function PersonaProfile({ profile, children }) {
   );
 }
 
+function complaintRenderKey(profileId, complaint, index) {
+  const eligibleReferenceCase = complaint.reference_cases?.find(
+    (candidate) => candidate?.reference_eligible === true,
+  );
+
+  const complaintKey =
+    complaint.complaint_id ??
+    complaint.case_id ??
+    eligibleReferenceCase?.case_id ??
+    "legacy-complaint";
+
+  return `${profileId}-${complaintKey}-${index + 1}`;
+}
+
 function PersonaConversation({ profile }) {
   const complaints = profile.result?.complaints ?? [];
   const isOfficial = profile.role === "official";
@@ -644,7 +629,7 @@ function PersonaConversation({ profile }) {
           {complaints.length > 0 ? (
             complaints.map((complaint, index) => (
               <div
-                key={`${profile.id}-complaint-${index + 1}`}
+                key={complaintRenderKey(profile.id, complaint, index)}
                 className={`rounded-[26px] border px-5 py-4 shadow-[0_12px_30px_rgba(20,23,28,0.07)] sm:px-6 sm:py-5 ${
                   isOfficial
                     ? "rounded-tr-[10px] border-brand/15 bg-brand-soft/45"
@@ -662,34 +647,7 @@ function PersonaConversation({ profile }) {
                     {complaint.complaint_text}
                   </p>
                 )}
-                {complaint.real_precedents?.length > 0 && (
-                  <div className="mt-3 rounded-[16px] bg-[#f7f8fa] px-4 py-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold text-slate">
-                        실제 유사 민원 발견
-                      </p>
-                      <span className="rounded-pill bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand">
-                        {complaint.real_precedents[0].similarity_score}% 일치
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[13px] font-semibold text-ink">
-                      {complaint.real_precedents[0].title}
-                    </p>
-                    <p className="mt-1 text-[11px] leading-5 text-slate">
-                      {[
-                        complaint.real_precedents[0].organization,
-                        complaint.real_precedents[0].registered_at,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                    {complaint.real_precedents[0].related_laws && (
-                      <p className="mt-1 text-[11px] leading-5 text-slate/80">
-                        {complaint.real_precedents[0].related_laws}
-                      </p>
-                    )}
-                  </div>
-                )}
+                <ComplaintReferenceCard complaint={complaint} />
               </div>
             ))
           ) : (
@@ -707,8 +665,7 @@ function PersonaDialogueView({
   policy,
   profiles,
   officialProfiles,
-  riskScore,
-  realismCheck,
+  complaintReferenceSummary,
   similarPolicies,
   similarity,
 }) {
@@ -726,7 +683,7 @@ function PersonaDialogueView({
   });
 
   return (
-        <section className="w-full pb-4">
+    <section className="w-full pb-4">
       <div className="flex items-start justify-between gap-6">
         <div>
           <p className="text-[13px] font-semibold text-brand">시민 시뮬레이션 결과</p>
@@ -748,32 +705,14 @@ function PersonaDialogueView({
               </label>
             )}
           </div>
+          <p className="mt-2 text-[13px] font-medium text-slate">
+            선택한 합성 페르소나 3명 기준 · 실제 인구 예측 아님
+          </p>
         </div>
-        <div className="flex items-start gap-3">
-          {typeof riskScore?.score === "number" && (
-            <div className="rounded-[14px] bg-brand-soft px-4 py-3 text-right">
-              <p className="text-[11px] font-medium text-slate">정책 민원 리스크</p>
-              <p className="mt-0.5 text-[20px] font-bold text-brand">
-                {riskScore.score}점
-              </p>
-            </div>
-          )}
-          {typeof realismCheck?.match_rate === "number" && (
-            <div
-              className="rounded-[14px] bg-[#f0f4f9] px-4 py-3 text-right"
-              title={`생성된 민원 ${realismCheck.total_complaints}건 중 ${realismCheck.matched_with_real_precedent}건이 실제 민원과 ${realismCheck.min_score_threshold}% 이상 유사`}
-            >
-              <p className="text-[11px] font-medium text-slate">생성 민원 현실성</p>
-              <p className="mt-0.5 text-[20px] font-bold text-ink">
-                {realismCheck.match_rate}%
-              </p>
-              <p className="text-[10px] text-slate">실제 민원과 매칭</p>
-            </div>
-          )}
-        </div>
+        <ComplaintReferenceSummary summary={complaintReferenceSummary} />
       </div>
 
-          <div className="mt-7 grid items-start gap-7 xl:grid-cols-[minmax(0,2fr)_1px_minmax(340px,1fr)] xl:gap-8">
+      <div className="mt-7 grid items-start gap-7 xl:grid-cols-[minmax(0,2fr)_1px_minmax(340px,1fr)] xl:gap-8">
         <div className="flex min-w-0 flex-col gap-10">
           {visibleProfiles.map((profile) => (
             <PersonaConversation key={profile.id} profile={profile} />
@@ -783,11 +722,15 @@ function PersonaDialogueView({
         <div aria-hidden="true" className="hidden h-full min-h-[520px] bg-line xl:block" />
 
         <aside className="min-w-0 border-t border-line pt-7 xl:sticky xl:top-6 xl:border-t-0 xl:pt-0">
+          <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
+            <PolicySummaryCard policy={policy} />
+          </div>
+
           <button
             type="button"
             aria-expanded={showSimilarPolicies}
             aria-controls="similar-policies-panel"
-            className="flex w-full items-center justify-between gap-4 rounded-[16px] border border-brand/25 bg-brand-soft/65 px-4 py-3.5 text-left text-[14px] font-semibold text-brand transition hover:border-brand/50 hover:bg-brand-soft focus:outline-none focus:ring-2 focus:ring-brand/20"
+            className="mt-4 flex w-full items-center justify-between gap-4 rounded-[16px] border border-brand/25 bg-brand-soft/65 px-4 py-3.5 text-left text-[14px] font-semibold text-brand transition hover:border-brand/50 hover:bg-brand-soft focus:outline-none focus:ring-2 focus:ring-brand/20"
             onClick={() => setShowSimilarPolicies((isOpen) => !isOpen)}
           >
             <span className="flex items-center gap-2.5">
@@ -810,10 +753,6 @@ function PersonaDialogueView({
               />
             </div>
           )}
-
-          <div className="mt-4 max-h-[calc(100vh-220px)] overflow-y-auto">
-            <PolicySummaryCard policy={policy} />
-          </div>
         </aside>
       </div>
     </section>
@@ -836,15 +775,16 @@ function SimulationRunScreen({ job }) {
   }
 
   return (
-    <SimulationLayout showSidebar={false}>
-      <div>
+    <main className="flex min-w-0 flex-1 flex-col px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
+      <div className="flex-1">
         {job.status === "completed" && profiles.length > 0 ? (
           <PersonaDialogueView
             policy={job.policy}
             profiles={profiles}
             officialProfiles={officialProfiles}
-            riskScore={job.result?.risk_score}
-            realismCheck={job.result?.realism_check}
+            complaintReferenceSummary={
+              job.result?.complaint_reference_summary
+            }
             similarPolicies={job.similar_policies}
             similarity={job.similarity}
           />
@@ -854,7 +794,7 @@ function SimulationRunScreen({ job }) {
           title && <ChatEmptyState title={title} />
         )}
       </div>
-    </SimulationLayout>
+    </main>
   );
 }
 
@@ -863,6 +803,8 @@ export default function PolicyPage() {
   const [inputMode, setInputMode] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [policyDraft, setPolicyDraft] = useState(null);
+  const [isSelectingPersonas, setIsSelectingPersonas] = useState(false);
   const [simulationJob, setSimulationJob] = useState(null);
   const [extractionStatus, setExtractionStatus] = useState("idle");
   const [extractionError, setExtractionError] = useState("");
@@ -912,8 +854,17 @@ export default function PolicyPage() {
       similarity: job.similarity ?? null,
       result: null,
       error: null,
+      selection_mode: job.selection_mode ?? "manual",
+      selection_seed: job.selection_seed ?? null,
+      selected_personas: job.selected_personas ?? [],
+      selection_match: job.selection_match ?? [],
     });
     void monitorSimulation(job.job_id);
+  };
+
+  const openPersonaSelection = (draft) => {
+    setPolicyDraft(draft);
+    setIsSelectingPersonas(true);
   };
 
   const selectFile = (file) => {
@@ -923,6 +874,7 @@ export default function PolicyPage() {
     setExtractionStatus("idle");
     setExtractionError("");
     setExtractedFields(null);
+    setPolicyDraft(null);
   };
 
   const handleDrop = (event) => {
@@ -973,8 +925,23 @@ export default function PolicyPage() {
     return <SimulationRunScreen job={simulationJob} />;
   }
 
+  if (isSelectingPersonas && policyDraft) {
+    return (
+      <PersonaSelectionStep
+        policyDraft={policyDraft}
+        onBack={() => setIsSelectingPersonas(false)}
+        onSimulationStarted={openSimulationScreen}
+      />
+    );
+  }
+
   if (inputMode === "text") {
-    return <DirectPolicyForm onSimulationStarted={openSimulationScreen} />;
+    return (
+      <DirectPolicyForm
+        initialValues={policyDraft}
+        onDraftReady={openPersonaSelection}
+      />
+    );
   }
 
   if (inputMode === "file-review" && extractedFields) {
@@ -982,8 +949,8 @@ export default function PolicyPage() {
       <DirectPolicyForm
         heading="파일에서 추출한 정책 정보"
         subheading="자동으로 추출한 내용입니다. 실행 전에 내용을 확인하고 필요한 부분을 수정하세요."
-        initialValues={extractedFields}
-        onSimulationStarted={openSimulationScreen}
+        initialValues={policyDraft ?? extractedFields}
+        onDraftReady={openPersonaSelection}
       />
     );
   }
@@ -1044,7 +1011,7 @@ export default function PolicyPage() {
             />
 
             <p className="mt-3 text-[12px] text-slate">
-              PDF, DOCX, HWP, HWPX, TXT 파일을 끌어다 놓아도 됩니다.
+              PDF, DOCX, HWPX, TXT, MD 파일을 끌어다 놓아도 됩니다.
             </p>
           </div>
 
