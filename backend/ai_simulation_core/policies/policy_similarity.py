@@ -13,8 +13,10 @@ from backend.ai_simulation_core.policies.policy_corpus import (
     build_policy_search_document,
     date_ordinal,
     load_policy_corpus,
+    load_policy_source_metadata,
     normalize_date,
     normalize_text,
+    source_hashes,
 )
 
 DEFAULT_INDEX_DIR = PROJECT_ROOT / "data" / "indexes" / "policies" / "current"
@@ -186,6 +188,14 @@ class PolicySimilarityService:
                 raise PolicyIndexUnavailableError(
                     f"정책 유사도 인덱스가 없습니다: {self.index_dir}"
                 )
+            expected_hashes = self.manifest.get("source_hashes")
+            if isinstance(expected_hashes, dict):
+                current_hashes = source_hashes()
+                if current_hashes != expected_hashes:
+                    raise PolicyIndexUnavailableError(
+                        "정부24 OpenAPI 정책 스냅샷이 인덱스 원본과 다릅니다. "
+                        "scripts/rag/build_policy_index.py로 인덱스를 재생성하세요."
+                    )
             import chromadb
 
             client = chromadb.PersistentClient(path=str(self.index_dir))
@@ -199,6 +209,13 @@ class PolicySimilarityService:
                     "정책 유사도 인덱스 건수가 manifest와 일치하지 않습니다."
                 )
         return self._collection
+
+    @property
+    def source_metadata(self) -> dict[str, Any]:
+        source = self.manifest.get("source")
+        if isinstance(source, dict) and source:
+            return source
+        return load_policy_source_metadata()
 
     @property
     def embedder(self) -> Any:
@@ -322,6 +339,7 @@ class PolicySimilarityService:
             "as_of_date": reference_date,
             "index_version": self.manifest.get("built_at"),
             "source_count": self.manifest.get("document_count", len(self._corpus)),
+            "source": self.source_metadata,
             "query_time_ms": round((time.perf_counter() - started_at) * 1000, 1),
             "results": ranked[:top_k],
         }

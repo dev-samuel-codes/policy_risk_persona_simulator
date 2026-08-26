@@ -8,6 +8,11 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 POLICY_DATA_DIR = PROJECT_ROOT / "data" / "raw" / "policies"
+POLICY_SOURCE_FILES = (
+    "service_list.json",
+    "service_detail.json",
+    "support_conditions.json",
+)
 
 SEARCH_FIELDS = (
     "policy_name",
@@ -54,6 +59,64 @@ def load_json_rows(path: Path) -> list[dict[str, Any]]:
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         raise ValueError(f"정책 원천 파일 형식이 올바르지 않습니다: {path}")
     return rows
+
+
+@lru_cache(maxsize=2)
+def load_policy_source_metadata(
+    data_dir: str | Path = POLICY_DATA_DIR,
+) -> dict[str, Any]:
+    """정책 파일에 기록된 OpenAPI 출처와 수집 시점을 정규화한다."""
+
+    data_path = Path(data_dir)
+    fetched_at_by_resource: dict[str, str] = {}
+    resource_paths: dict[str, str] = {}
+    source_counts: dict[str, int] = {}
+    provider = "행정안전부"
+    dataset = "대한민국 공공서비스(혜택) 정보"
+    api_type = "OpenAPI"
+    base_url = ""
+
+    for filename in POLICY_SOURCE_FILES:
+        payload = json.loads((data_path / filename).read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            return {
+                "provider": provider,
+                "dataset": dataset,
+                "api_type": "local_snapshot",
+                "fetched_at": None,
+                "resource_fetched_at": {},
+                "resource_paths": {},
+                "source_counts": {},
+            }
+
+        source = payload.get("source")
+        source = source if isinstance(source, dict) else {}
+        resource_name = normalize_text(payload.get("resource")) or Path(filename).stem
+        fetched_at = normalize_text(payload.get("fetched_at"))
+        if fetched_at:
+            fetched_at_by_resource[resource_name] = fetched_at
+        resource_path = normalize_text(source.get("path"))
+        if resource_path:
+            resource_paths[resource_name] = resource_path
+        count = payload.get("count")
+        if isinstance(count, int) and count >= 0:
+            source_counts[resource_name] = count
+        provider = normalize_text(source.get("provider")) or provider
+        dataset = normalize_text(source.get("dataset")) or dataset
+        api_type = normalize_text(source.get("api_type")) or api_type
+        base_url = normalize_text(source.get("base_url")) or base_url
+
+    fetched_at = max(fetched_at_by_resource.values(), default=None)
+    return {
+        "provider": provider,
+        "dataset": dataset,
+        "api_type": api_type,
+        "base_url": base_url,
+        "fetched_at": fetched_at,
+        "resource_fetched_at": fetched_at_by_resource,
+        "resource_paths": resource_paths,
+        "source_counts": source_counts,
+    }
 
 
 def _by_service_id(
@@ -237,7 +300,7 @@ def build_direct_policy_query(policy: dict[str, Any]) -> dict[str, str]:
 def source_hashes(data_dir: str | Path = POLICY_DATA_DIR) -> dict[str, str]:
     data_path = Path(data_dir)
     result = {}
-    for name in ("service_list.json", "service_detail.json", "support_conditions.json"):
+    for name in POLICY_SOURCE_FILES:
         digest = hashlib.sha256()
         with (data_path / name).open("rb") as file:
             for chunk in iter(lambda: file.read(1024 * 1024), b""):

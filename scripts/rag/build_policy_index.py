@@ -17,6 +17,7 @@ from backend.ai_simulation_core.policies.policy_corpus import (  # noqa: E402
     build_policy_search_document,
     date_ordinal,
     load_policy_corpus,
+    load_policy_source_metadata,
     source_hashes,
 )
 
@@ -145,6 +146,7 @@ def build_index(args: argparse.Namespace) -> dict:
         "max_sequence_length": model.max_seq_length,
         "document_count": len(policies),
         "unique_service_id_count": len(set(service_ids)),
+        "source": load_policy_source_metadata(data_dir),
         "source_hashes": source_hashes(data_dir),
         "built_at": datetime.now(timezone.utc).isoformat(),
     }

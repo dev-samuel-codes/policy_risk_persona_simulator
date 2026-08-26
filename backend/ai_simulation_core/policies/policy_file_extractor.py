@@ -1,8 +1,8 @@
-"""업로드된 정책 파일(PDF/DOCX/HWP/HWPX/TXT/MD)에서 정책 필드를 추출한다.
+"""업로드된 정책 파일(PDF/DOCX/HWPX/TXT/MD)에서 정책 필드를 추출한다.
 
 DB에는 아무것도 저장하지 않는다. 추출 결과는 호출한 쪽(API 응답)으로만 반환되며,
-사용자가 검토/수정 후 /api/policies/direct 로 제출해야만 data/runtime/active_policy.json
-(파일 기반 저장소)에 반영된다.
+사용자가 검토·수정하고 페르소나를 선택해 시뮬레이션을 제출할 때만
+data/runtime/active_policy.json(파일 기반 저장소)에 반영된다.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from backend.ai_simulation_core.llm.llm_gateway import run_llm
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024  # 15MB
 MAX_EXTRACT_CHARS = 8000  # LLM 프롬프트에 넣을 원문 최대 길이
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".hwp", ".hwpx", ".txt", ".md"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".hwpx", ".txt", ".md"}
 
 # backend.api.DirectPolicyInput / policy_repository.build_direct_policy 와 동일한 키 순서.
 POLICY_FIELD_KEYS = (
@@ -82,21 +82,6 @@ def _read_hwpx(path: Path) -> str:
     return text
 
 
-def _read_hwp(path: Path) -> str:
-    try:
-        from hwp5.filestructure import Hwp5File
-    except ImportError as error:
-        raise PolicyFileExtractionError(
-            "HWP 파일을 읽을 수 있는 라이브러리(pyhwp)가 설치되어 있지 않습니다."
-        ) from error
-
-    try:
-        hwp = Hwp5File(str(path))
-        return hwp.text
-    except Exception as error:  # noqa: BLE001 - 외부 파서 예외를 사용자 메시지로 변환
-        raise PolicyFileExtractionError(f"HWP 파일을 읽을 수 없습니다: {error}") from error
-
-
 def _read_plain_text(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
@@ -105,7 +90,6 @@ _READERS = {
     ".pdf": _read_pdf,
     ".docx": _read_docx,
     ".hwpx": _read_hwpx,
-    ".hwp": _read_hwp,
     ".txt": _read_plain_text,
     ".md": _read_plain_text,
 }
@@ -154,7 +138,7 @@ def _build_extraction_prompt(text: str) -> str:
     )
     truncated = text[:MAX_EXTRACT_CHARS]
 
-    return f"""다음은 정책/법령 공고문에서 추출한 원문입니다.
+    return f"""다음은 정책 공고문에서 추출한 원문입니다.
 
 [원문]
 {truncated}

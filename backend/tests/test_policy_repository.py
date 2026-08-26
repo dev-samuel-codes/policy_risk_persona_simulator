@@ -47,6 +47,51 @@ class DirectPolicyRepositoryTest(unittest.TestCase):
         self.assertEqual(loaded, policy)
         self.assertEqual(selected["상세정보"]["서비스명"], "청년 주거 지원")
 
+    def test_direct_policy_keeps_structured_region_and_age_conditions(self) -> None:
+        policy = policy_repository.build_direct_policy(
+            {
+                **self.fields,
+                "region_scope": "specific",
+                "region_province": "서울",
+                "region_district": "서울-서초구",
+                "age_min": 19,
+                "age_max": 34,
+                "age_basis": "dataset_age",
+            }
+        )
+
+        self.assertEqual(policy["region_scope"], "specific")
+        self.assertEqual(policy["region_province"], "서울")
+        self.assertEqual(policy["region_district"], "서울-서초구")
+        self.assertEqual(policy["age_min"], 19)
+        self.assertEqual(policy["age_max"], 34)
+        self.assertEqual(policy["age_basis"], "dataset_age")
+
+    def test_invalid_structured_conditions_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "전국 정책"):
+            policy_repository.build_direct_policy(
+                {
+                    **self.fields,
+                    "region_scope": "nationwide",
+                    "region_province": "서울",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "region_province"):
+            policy_repository.build_direct_policy(
+                {
+                    **self.fields,
+                    "region_scope": "specific",
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "age_min"):
+            policy_repository.build_direct_policy(
+                {
+                    **self.fields,
+                    "age_min": 35,
+                    "age_max": 34,
+                }
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

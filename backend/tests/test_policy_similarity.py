@@ -87,6 +87,12 @@ class PolicySimilarityTest(unittest.TestCase):
                 "built_at": "2026-08-06T00:00:00+00:00",
                 "document_count": 2,
                 "embedding_model": "test-model",
+                "source": {
+                    "provider": "행정안전부",
+                    "dataset": "대한민국 공공서비스(혜택) 정보",
+                    "api_type": "OpenAPI",
+                    "fetched_at": "2026-08-25T00:00:00+00:00",
+                },
             },
         )
         self.policy = build_direct_policy(
@@ -113,12 +119,18 @@ class PolicySimilarityTest(unittest.TestCase):
         )
 
     def test_similarity_response_contains_source_fields(self) -> None:
-        result = self.service.search(self.policy, top_k=1, min_score=0)["results"][0]
+        response = self.service.search(self.policy, top_k=1, min_score=0)
+        result = response["results"][0]
 
         self.assertEqual(result["organization"], "주거지원청")
         self.assertEqual(result["registered_at"], "2020-01-01")
         self.assertEqual(result["benefits"], "월 20만 원을 12개월간 지원")
         self.assertEqual(result["source_url"], "https://example.test/policy")
+        self.assertEqual(response["source"]["api_type"], "OpenAPI")
+        self.assertEqual(
+            response["source"]["fetched_at"],
+            "2026-08-25T00:00:00+00:00",
+        )
 
     def test_character_overlap_matches_korean_compound_words(self) -> None:
         query = "소상공인 저금리 경영안정자금"

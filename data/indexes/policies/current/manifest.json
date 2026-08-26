@@ -4,12 +4,34 @@
   "embedding_model": "snunlp/KR-SBERT-V40K-klueNLI-augSTS",
   "embedding_dimension": 768,
   "max_sequence_length": 512,
-  "document_count": 10966,
-  "unique_service_id_count": 10966,
-  "source_hashes": {
-    "service_list.json": "a2e7b7e383094342cd48c9a283d23c89e8e4ecf0757ed6037351d710f5b6b37e",
-    "service_detail.json": "9facd1684bca71d070ba79f2420bd4394a8e1958a2a82a0e6c0f964e238b3756",
-    "support_conditions.json": "27a2187b63d994d48f52c42b0d541d6ba5b26e3df7d5d02b71fd7a8419723947"
+  "document_count": 10961,
+  "unique_service_id_count": 10961,
+  "source": {
+    "provider": "행정안전부",
+    "dataset": "대한민국 공공서비스(혜택) 정보",
+    "api_type": "OpenAPI",
+    "base_url": "https://api.odcloud.kr/api",
+    "fetched_at": "2026-08-25T06:43:15.578847+00:00",
+    "resource_fetched_at": {
+      "service_list": "2026-08-25T06:43:15.578847+00:00",
+      "service_detail": "2026-08-25T06:43:15.578847+00:00",
+      "support_conditions": "2026-08-25T06:43:15.578847+00:00"
+    },
+    "resource_paths": {
+      "service_list": "/gov24/v3/serviceList",
+      "service_detail": "/gov24/v3/serviceDetail",
+      "support_conditions": "/gov24/v3/supportConditions"
+    },
+    "source_counts": {
+      "service_list": 10961,
+      "service_detail": 10961,
+      "support_conditions": 10961
+    }
   },
-  "built_at": "2026-08-06T05:09:38.960177+00:00"
+  "source_hashes": {
+    "service_list.json": "781e6ba5807701ab621c0ffe906cc136b3bd887069a0ca639156b00fca147d11",
+    "service_detail.json": "58a0530bd7f9401e2186c63e2d608faf7844466c3e3932af89bedb52e30f0923",
+    "support_conditions.json": "2d19f821df68d160e272575e13c6deb82f5c51b044895d12289ee48e8f591bc4"
+  },
+  "built_at": "2026-08-25T06:45:15.978792+00:00"
 }

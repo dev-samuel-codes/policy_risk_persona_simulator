@@ -2,6 +2,7 @@ import json
 import random
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 POLICY_DATA_DIR = PROJECT_ROOT / "data" / "raw" / "policies"
@@ -50,8 +51,38 @@ def get_random_policy(policies: list[dict]) -> dict:
     return random.choice(policies)
 
 
-def build_direct_policy(fields: Mapping[str, str]) -> dict:
-    normalized = {key: str(value or "").strip() for key, value in fields.items()}
+def _optional_int(value: Any, field_name: str) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name}은 정수여야 합니다.")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{field_name}은 정수여야 합니다.") from error
+
+
+def build_direct_policy(fields: Mapping[str, Any]) -> dict:
+    text_fields = {
+        "policy_name",
+        "target_audience",
+        "application_period",
+        "effective_date",
+        "required_documents",
+        "application_method",
+        "contact",
+        "benefits",
+        "exclusion_conditions",
+        "region_scope",
+        "region_province",
+        "region_district",
+        "age_basis",
+    }
+    normalized = {
+        key: str(value or "").strip()
+        for key, value in fields.items()
+        if key in text_fields
+    }
     policy_name = normalized.get("policy_name", "")
     benefits = normalized.get("benefits", "")
 
@@ -59,6 +90,26 @@ def build_direct_policy(fields: Mapping[str, str]) -> dict:
         raise ValueError("정책명은 필수입니다.")
     if not benefits:
         raise ValueError("혜택은 필수입니다.")
+
+    region_scope = normalized.get("region_scope") or "nationwide"
+    region_province = normalized.get("region_province", "")
+    region_district = normalized.get("region_district", "")
+    age_basis = normalized.get("age_basis") or "dataset_age"
+    age_min = _optional_int(fields.get("age_min"), "age_min")
+    age_max = _optional_int(fields.get("age_max"), "age_max")
+
+    if region_scope not in {"nationwide", "specific"}:
+        raise ValueError("region_scope는 nationwide 또는 specific이어야 합니다.")
+    if region_scope == "nationwide" and (region_province or region_district):
+        raise ValueError(
+            "전국 정책에는 region_province와 region_district를 지정할 수 없습니다."
+        )
+    if region_scope == "specific" and not region_province:
+        raise ValueError("특정 지역 정책에는 region_province가 필요합니다.")
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise ValueError("age_min은 age_max보다 클 수 없습니다.")
+    if age_basis != "dataset_age":
+        raise ValueError("현재 age_basis는 dataset_age만 지원합니다.")
 
     exclusion_conditions = normalized.get("exclusion_conditions", "")
     policy_detail = {
@@ -77,6 +128,12 @@ def build_direct_policy(fields: Mapping[str, str]) -> dict:
 
     return {
         "입력출처": "직접입력",
+        "region_scope": region_scope,
+        "region_province": region_province,
+        "region_district": region_district,
+        "age_min": age_min,
+        "age_max": age_max,
+        "age_basis": age_basis,
         "목록정보": {
             "서비스ID": "direct-input",
             "서비스명": policy_name,
