@@ -1,7 +1,7 @@
 [project]
-name = "policy-risk-persona-simulator"
+name = "policy-persona-simulator"
 version = "0.1.0"
-description = "정책 민원 리스크 페르소나 시뮬레이터"
+description = "정책 민원 페르소나 시뮬레이터"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,11 +12,10 @@ dependencies = [
     "numpy>=2.0,<3",
     "pandas==3.0.3",
     "pyarrow==24.0.0",
-    "pyhwp==0.1b15",
+    "pydantic>=2.11,<3",
     "pypdf==6.15.0",
     "python-docx==1.2.0",
     "python-multipart==0.0.32",
-    "pyyaml>=6.0,<7",
     "safetensors==0.8.0",
     "sentencepiece==0.2.1",
     "sentence-transformers==5.6.1",
@@ -24,6 +23,13 @@ dependencies = [
     "transformers==5.12.1",
     "uvicorn>=0.35,<1",
 ]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
 
 [tool.ruff]
 target-version = "py312"
