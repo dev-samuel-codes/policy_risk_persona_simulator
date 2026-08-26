@@ -5,6 +5,7 @@
 .vscode/
 __pycache__/
 *.py[cod]
+*.egg-info/
 .DS_Store
 .pytest_cache/
 .ruff_cache/
@@ -16,6 +17,7 @@ htmlcov/
 # Node dependencies and build output
 node_modules/
 dist/
+.vite/
 .next/
 .vinext/
 coverage/
@@ -38,17 +40,20 @@ wandb/
 *.safetensors
 
 data/raw/personas/
-data/raw/reactions
-data/raw/laws/bodies/
 data/labels/**/*.csv
 data/labels/**/*.jsonl
-data/training/
-data/indexes/
 data/runtime/
-scripts/oneoff
+
+# 재생성 과정에서 생기는 일시·백업 인덱스만 제외합니다.
+# 현재 정책 인덱스와 활성 민원 인덱스는 제출 재현성을 위해 추적합니다.
+data/indexes/**/.backup-*/
+data/indexes/**/.staging-*/
+data/indexes/civil_complaints/current/*
+!data/indexes/civil_complaints/current/active.json
+
+# 정부24 갱신 스크립트가 만드는 이전 원천 스냅샷
+data/raw/.gov24-backup-*/
 
 # Generated analysis and vector database artifacts
 analysis/**/output/
 **/chroma_db/
-law_simulator(rag)/law_conditions.json
-policy_simulator(rag)/policy_conditions.json

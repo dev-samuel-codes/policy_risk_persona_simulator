@@ -1,5 +1,5 @@
 {
-  "policySourceDir": "/Users/samuel/Desktop/Project/policy_risk_persona_simulator/backend/data/policy_data",
+  "policySourceDir": "data/raw/policies",
   "policySourceCount": 10966,
   "policyStartIndex": 66,
   "resumeBasePolicyStartIndex": 0,

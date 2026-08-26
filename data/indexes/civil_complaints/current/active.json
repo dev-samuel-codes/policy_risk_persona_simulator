@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "active_version": "20260826045003647293-85a7ed57d69f",
+  "version_path": "../versions/20260826045003647293-85a7ed57d69f",
+  "manifest_sha256": "85a7ed57d69f3a94ecc5a5d0900b037683d7cf4f56505eb5a8885e7c228e5a48",
+  "activated_at": "2026-08-26T04:50:04.017381+00:00",
+  "reload_strategy": "detect_active_pointer_per_request",
+  "restart_required": false
+}

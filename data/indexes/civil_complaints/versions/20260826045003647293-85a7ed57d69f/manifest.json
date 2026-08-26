@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "collection_name": "civil_complaint_reference",
+  "embedding_model": "snunlp/KR-SBERT-V40K-klueNLI-augSTS",
+  "embedding_dimension": 768,
+  "max_sequence_length": 512,
+  "detail_sha256": "4f6790174d35afa1812142ca237ed1fa841161af56846e885e225eb46aa3ee4d",
+  "metadata_sha256": "5458c9b84677bb1a93dfec28a6b6fb91c4a320ef11581c30942f7a9a9534aa03",
+  "raw_record_count": 2168,
+  "unique_count": 1344,
+  "source": {
+    "source_kind": "public_faq_snapshot",
+    "dataset": "공공 민원 FAQ 공개 스냅샷",
+    "detail_file": "data/raw/faq/civil_policy_qna_detail.json",
+    "metadata_file": "data/raw/faq/civil_policy_qna_metadata.json",
+    "matched_policy_used": false,
+    "detail_sha256": "4f6790174d35afa1812142ca237ed1fa841161af56846e885e225eb46aa3ee4d",
+    "metadata_sha256": "5458c9b84677bb1a93dfec28a6b6fb91c4a320ef11581c30942f7a9a9534aa03",
+    "raw_record_count": 2168,
+    "unique_count": 1344
+  },
+  "activation": {
+    "kind": "atomic_pointer",
+    "logical_path": "data/indexes/civil_complaints/current",
+    "pointer_file": "active.json",
+    "reload_strategy": "detect_active_pointer_per_request",
+    "restart_required": false
+  },
+  "built_at": "2026-08-26T04:50:03.647293+00:00"
+}
