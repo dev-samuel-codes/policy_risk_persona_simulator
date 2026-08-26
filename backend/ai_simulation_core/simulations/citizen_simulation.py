@@ -184,7 +184,7 @@ def run_citizen_simulation(
             print(f"  [최종 검증 실패] 유효한 시민 응답을 생성하지 못했습니다: {errors}")
         return None
 
-    # 검증을 통과한 결과에만 스코어링용 페르소나 식별자를 추가한다.
+    # 검증을 통과한 결과에만 후속 연결용 페르소나 식별자를 추가한다.
     parsed["persona_id"] = persona.get("uuid")
     parsed["_validation_errors"] = []
     parsed["_quality_gate"] = {
