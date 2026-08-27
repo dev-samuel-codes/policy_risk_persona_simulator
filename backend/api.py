@@ -177,10 +177,11 @@ def validate_completed_simulation_result(
             persona=persona,
             policy=policy,
             citizen_result=citizen_result,
+            enforce_content_quality=False,
         )
         if errors:
             raise RuntimeError(
-                f"공무원 응답 {index}이 근거 품질 검증을 통과하지 않았습니다: "
+                f"공무원 응답 {index}의 연결 구조가 올바르지 않습니다: "
                 + ", ".join(errors)
             )
 

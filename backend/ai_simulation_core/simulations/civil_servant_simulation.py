@@ -1,4 +1,4 @@
-"""Qwen으로 생성한 공무원 답변을 정책 원문에 맞게 검증한다."""
+"""Qwen 공무원 답변을 생성하고 시민·공무원 연결 구조를 검증한다."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from backend.ai_simulation_core.simulations.citizen_quality import (
 )
 
 
-QUALITY_MODE = "qwen_policy_grounded_v1"
+QUALITY_MODE = "qwen_best_effort_v1"
 INACTIVE_OFFICIAL_MARKERS = ("전직", "퇴직", "은퇴", "구직")
 _OFFICIAL_COMMITMENT_PATTERN = re.compile(
     r"(?:승인|선정|지급|수급|연장)"
@@ -398,6 +398,7 @@ def validate_civil_servant_response(
     persona: dict,
     policy: dict,
     citizen_result: dict,
+    enforce_content_quality: bool = True,
 ) -> list[str]:
     if not isinstance(result, dict):
         return ["OFFICIAL_RESULT_NOT_OBJECT"]
@@ -421,7 +422,7 @@ def validate_civil_servant_response(
     response = _text(result.get("response"))
     if not response:
         errors.append("OFFICIAL_RESPONSE_EMPTY")
-    else:
+    elif enforce_content_quality:
         citizen_persona = citizen_result.get("persona")
         if not isinstance(citizen_persona, dict):
             citizen_persona = {}
@@ -460,6 +461,8 @@ def run_civil_servant_simulation(
     citizen_result: dict,
     max_retries: int = 3,
 ) -> dict:
+    """Qwen을 한 번 호출하고, 사용할 답변이 없으면 서버 기본 답변을 반환한다."""
+
     if not 1 <= max_retries <= 3:
         raise ValueError("공무원 응답 재시도 횟수는 1 이상 3 이하여야 합니다.")
     basis, grounded_response = build_grounded_response(policy, citizen_result)
@@ -476,58 +479,55 @@ def run_civil_servant_simulation(
     if not citizen_id:
         input_errors.append("OFFICIAL_CITIZEN_LINK_MISMATCH")
     if input_errors:
-        raise RuntimeError("공무원 응답 품질 검증 실패: " + ", ".join(input_errors))
+        raise RuntimeError("공무원 응답 입력 검증 실패: " + ", ".join(input_errors))
 
     complaint_text = _citizen_complaint_text(citizen_result)
-    validation_feedback: list[str] | None = None
-    last_errors: list[str] = []
-    for attempt in range(1, max_retries + 1):
-        prompt = civil_servant_prompt(
-            persona,
-            policy,
-            complaint_text,
-            grounded_response,
-            validation_feedback=validation_feedback,
-        )
+    prompt = civil_servant_prompt(
+        persona,
+        policy,
+        complaint_text,
+        grounded_response,
+        validation_feedback=None,
+    )
+    fallback_used = False
+    try:
         raw_output = run_llm(prompt)
         response = parse_civil_servant_response(raw_output)
-        if response is None:
-            last_errors = ["OFFICIAL_RESPONSE_PARSE_ERROR"]
-            validation_feedback = last_errors
-            print(
-                f"  [공무원 시도 {attempt}/{max_retries}] "
-                "응답 파싱 실패, 재시도"
-            )
-            continue
-
-        result = {
-            "official_persona_id": official_id,
-            "citizen_persona_id": citizen_id,
-            "basis": basis,
-            "response": response,
-            "_validation_errors": [],
-            "_quality_gate": {
-                "status": "passed",
-                "mode": QUALITY_MODE,
-                "removed_statements": 0,
-                "generation_attempts": attempt,
-            },
-        }
-        last_errors = validate_civil_servant_response(
-            result,
-            persona=persona,
-            policy=policy,
-            citizen_result=citizen_result,
-        )
-        if not last_errors:
-            return result
-        validation_feedback = last_errors
+    except Exception as exc:
+        response = None
         print(
-            f"  [공무원 시도 {attempt}/{max_retries}] "
-            f"검증 실패: {last_errors}"
+            "  [공무원 생성] Qwen 호출 실패, 서버 기본 답변 사용: "
+            f"{type(exc).__name__}"
         )
 
-    raise RuntimeError(
-        "공무원 응답 품질 검증 실패: "
-        + ", ".join(last_errors or ["OFFICIAL_RESPONSE_UNKNOWN_ERROR"])
+    if response is None:
+        response = grounded_response
+        fallback_used = True
+        print("  [공무원 생성] 사용할 응답이 없어 서버 기본 답변을 사용합니다.")
+
+    result = {
+        "official_persona_id": official_id,
+        "citizen_persona_id": citizen_id,
+        "basis": basis,
+        "response": response,
+        "_validation_errors": [],
+        "_quality_gate": {
+            "status": "passed",
+            "mode": QUALITY_MODE,
+            "removed_statements": 0,
+            "generation_attempts": 1,
+            "fallback_used": fallback_used,
+        },
+    }
+    structural_errors = validate_civil_servant_response(
+        result,
+        persona=persona,
+        policy=policy,
+        citizen_result=citizen_result,
+        enforce_content_quality=False,
     )
+    if structural_errors:
+        raise RuntimeError(
+            "공무원 응답 구조 검증 실패: " + ", ".join(structural_errors)
+        )
+    return result

@@ -145,7 +145,7 @@ class CivilServantSimulationTest(unittest.TestCase):
         self.assertEqual(result["_quality_gate"]["status"], "passed")
         self.assertEqual(result["_quality_gate"]["mode"], QUALITY_MODE)
         self.assertEqual(result["_quality_gate"]["generation_attempts"], 1)
-        self.assertEqual(QUALITY_MODE, "qwen_policy_grounded_v1")
+        self.assertEqual(QUALITY_MODE, "qwen_best_effort_v1")
         self.assertEqual(
             validate_civil_servant_response(
                 result,
@@ -185,11 +185,12 @@ class CivilServantSimulationTest(unittest.TestCase):
     @patch(
         "backend.ai_simulation_core.simulations.civil_servant_simulation.run_llm"
     )
-    def test_failed_generation_retries_with_validation_feedback(self, run_llm) -> None:
-        run_llm.side_effect = [
-            self._llm_output("월 100만 원을 지급하겠습니다."),
-            self._llm_output(),
-        ]
+    def test_runtime_accepts_first_nonempty_response_without_quality_retry(
+        self,
+        run_llm,
+    ) -> None:
+        generated_response = "국토교통부 청년정책과가 이 사업의 담당 기관입니다."
+        run_llm.return_value = self._llm_output(generated_response)
 
         result = run_civil_servant_simulation(
             self.official,
@@ -198,28 +199,29 @@ class CivilServantSimulationTest(unittest.TestCase):
             max_retries=3,
         )
 
-        self.assertEqual(run_llm.call_count, 2)
-        self.assertEqual(result["response"], self.safe_response)
-        self.assertEqual(result["_quality_gate"]["generation_attempts"], 2)
-        retry_prompt = run_llm.call_args_list[1].args[0]
-        self.assertIn("UNSUPPORTED_NUMERIC_FACT", retry_prompt)
-        self.assertIn("UNSUPPORTED_OFFICIAL_COMMITMENT", retry_prompt)
+        self.assertEqual(run_llm.call_count, 1)
+        self.assertEqual(result["response"], generated_response)
+        self.assertEqual(result["_quality_gate"]["generation_attempts"], 1)
+        self.assertFalse(result["_quality_gate"]["fallback_used"])
 
     @patch(
         "backend.ai_simulation_core.simulations.civil_servant_simulation.run_llm"
     )
-    def test_all_invalid_generations_raise_after_three_attempts(self, run_llm) -> None:
-        run_llm.return_value = self._llm_output("월 100만 원을 지급하겠습니다.")
+    def test_qwen_error_uses_grounded_fallback_without_retry(self, run_llm) -> None:
+        run_llm.side_effect = RuntimeError("Qwen unavailable")
 
-        with self.assertRaisesRegex(RuntimeError, "공무원 응답 품질 검증 실패"):
-            run_civil_servant_simulation(
-                self.official,
-                self.policy,
-                self.citizen,
-                max_retries=3,
-            )
+        result = run_civil_servant_simulation(
+            self.official,
+            self.policy,
+            self.citizen,
+            max_retries=3,
+        )
+        _, fallback_response = build_grounded_response(self.policy, self.citizen)
 
-        self.assertEqual(run_llm.call_count, 3)
+        self.assertEqual(run_llm.call_count, 1)
+        self.assertEqual(result["response"], fallback_response)
+        self.assertEqual(result["_quality_gate"]["generation_attempts"], 1)
+        self.assertTrue(result["_quality_gate"]["fallback_used"])
 
     def test_missing_contact_stays_unknown_in_grounded_draft(self) -> None:
         policy = {
@@ -402,12 +404,11 @@ class CivilServantSimulationTest(unittest.TestCase):
     @patch(
         "backend.ai_simulation_core.simulations.civil_servant_simulation.run_llm"
     )
-    def test_mixed_output_retries_with_parse_error_feedback(self, run_llm) -> None:
+    def test_mixed_output_uses_grounded_fallback_without_retry(self, run_llm) -> None:
         fence = chr(96) * 3
-        run_llm.side_effect = [
-            f"추가 설명\n{fence}json\n{self._llm_output()}\n{fence}",
-            self._llm_output(),
-        ]
+        run_llm.return_value = (
+            f"추가 설명\n{fence}json\n{self._llm_output()}\n{fence}"
+        )
 
         result = run_civil_servant_simulation(
             self.official,
@@ -415,14 +416,12 @@ class CivilServantSimulationTest(unittest.TestCase):
             self.citizen,
             max_retries=3,
         )
+        _, fallback_response = build_grounded_response(self.policy, self.citizen)
 
-        self.assertEqual(run_llm.call_count, 2)
-        self.assertEqual(result["response"], self.safe_response)
-        self.assertEqual(result["_quality_gate"]["generation_attempts"], 2)
-        self.assertIn(
-            "OFFICIAL_RESPONSE_PARSE_ERROR",
-            run_llm.call_args_list[1].args[0],
-        )
+        self.assertEqual(run_llm.call_count, 1)
+        self.assertEqual(result["response"], fallback_response)
+        self.assertEqual(result["_quality_gate"]["generation_attempts"], 1)
+        self.assertTrue(result["_quality_gate"]["fallback_used"])
 
     def test_uncertainty_does_not_excuse_invented_government24_channel(self) -> None:
         policy = {

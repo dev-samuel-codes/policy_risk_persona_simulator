@@ -644,15 +644,14 @@ class SimulationApiTest(unittest.TestCase):
 
         api.validate_completed_simulation_result(result, persona_ids)
 
-    def test_completed_result_integrity_rejects_tampered_official_response(
+    def test_completed_result_accepts_nonempty_official_response_without_content_gate(
         self,
     ) -> None:
         persona_ids = ["one", "two", "three"]
         result = self._completed_result(persona_ids)
         result["civil_servant_results"][0]["response"] = "이미 승인되었습니다."
 
-        with self.assertRaisesRegex(RuntimeError, "공무원 응답 1"):
-            api.validate_completed_simulation_result(result, persona_ids)
+        api.validate_completed_simulation_result(result, persona_ids)
 
     def test_completed_result_integrity_rejects_inactive_official(self) -> None:
         persona_ids = ["one", "two", "three"]

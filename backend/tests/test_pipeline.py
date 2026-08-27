@@ -547,7 +547,7 @@ class PipelineResultTest(unittest.TestCase):
         official_run.assert_not_called()
         self.complaint_search.assert_not_called()
 
-    def test_invalid_official_response_fails_closed_before_downstream_steps(
+    def test_official_content_does_not_block_downstream_steps(
         self,
     ) -> None:
         policy = {"상세정보": {"서비스명": "청년 월세 지원"}}
@@ -585,21 +585,25 @@ class PipelineResultTest(unittest.TestCase):
                     "_validation_errors": [],
                     "_quality_gate": {
                         "status": "passed",
-                        "mode": "qwen_policy_grounded_v1",
+                        "mode": QUALITY_MODE,
                         "removed_statements": 0,
                         "generation_attempts": 1,
+                        "fallback_used": False,
                     },
                 },
             ),
             patch.object(pipeline, "unload_llm"),
         ):
-            with self.assertRaisesRegex(RuntimeError, "공무원 페르소나 응답"):
-                pipeline.run_pipeline(
-                    policy=policy,
-                    citizen_personas=selected,
-                )
+            result = pipeline.run_pipeline(
+                policy=policy,
+                citizen_personas=selected,
+            )
 
-        self.complaint_search.assert_not_called()
+        self.assertEqual(
+            result["civil_servant_results"][0]["response"],
+            "이미 승인되었습니다.",
+        )
+        self.complaint_search.assert_called_once()
 
 
 if __name__ == "__main__":

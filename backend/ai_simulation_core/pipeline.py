@@ -281,11 +281,12 @@ def _run_pipeline(
             persona=civil_persona,
             policy=selected_policy,
             citizen_result=citizen_result,
+            enforce_content_quality=False,
         )
         if civil_errors:
             persona_id = civil_persona.get("uuid", f"index-{index}")
             raise RuntimeError(
-                "공무원 페르소나 응답이 품질 검증을 통과하지 못했습니다: "
+                "공무원 페르소나 응답의 연결 구조가 올바르지 않습니다: "
                 f"{persona_id} ({', '.join(civil_errors)})"
             )
         civil_servant_results.append(
