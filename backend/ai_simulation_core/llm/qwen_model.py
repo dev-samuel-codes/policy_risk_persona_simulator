@@ -21,7 +21,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-QWEN_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
+QWEN_MODEL_NAME = "Qwen/Qwen3-8B"
 CUDA_MAX_MEMORY = "9GiB"
 CPU_MAX_MEMORY = "22GiB"
 

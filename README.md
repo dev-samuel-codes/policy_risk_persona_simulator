@@ -120,7 +120,7 @@ flowchart LR
     B --> C["지역·연령 조건 설정"]
     C --> D["시민 페르소나 3명 수동 또는 무작위 선택"]
     B --> E["정부24 유사 정책 검색"]
-    D --> F["전용 프로세스의 Qwen3-4B Instruct 시민 민원 생성"]
+    D --> F["전용 프로세스의 Qwen3-8B 시민 민원 생성"]
     F --> G["시민 결과 품질 게이트"]
     G --> H["정책 근거형 공무원 답변 구성·검증"]
     G --> I["공개 민원 Q&A 참고 사례 검색"]
@@ -136,7 +136,7 @@ flowchart LR
 3. 전국 또는 특정 지역과 최소·최대 연령을 지정합니다.
 4. 조건을 충족하는 시민 또는 연령 하한·상한에서 정확히 1년 벗어난 경계 시민 중 3명을 선택합니다. 무작위 모드는 조건 충족 시민만 사용합니다.
 5. FastAPI가 정책, 선택 조건과 페르소나 ID를 다시 검증하고 비동기 작업을 생성합니다.
-6. Qwen3-4B Instruct가 시민마다 민원 1개를 생성하고, 서버가 정책·페르소나 근거를 검증합니다.
+6. Qwen3-8B가 시민마다 민원 1개를 생성하고, 서버가 정책·페르소나 근거를 검증합니다.
 7. 서버가 같은 민원 쟁점을 정책 원문과 연결해 공무원 답변을 구성하고 다시 검증합니다.
 8. 정부24 유사 정책과 공개 민원 Q&A 참고 사례를 연결합니다.
 9. 시민 3명과 공무원 답변 3개가 모두 검증된 경우에만 완료 결과를 표시합니다.
@@ -165,11 +165,11 @@ flowchart LR
 
 | 역할 | 모델 | 현재 동작 |
 |---|---|---|
-| 시민 민원 생성·정책 파일 필드 추출 | `Qwen/Qwen3-4B-Instruct-2507` | `main`의 기본 생성 모델 |
+| 시민·공무원 응답 생성 및 정책 파일 필드 추출 | `Qwen/Qwen3-8B` | `main`의 기본 생성 모델 |
 | 정책·민원 임베딩 검색 | `snunlp/KR-SBERT-V40K-klueNLI-augSTS` | 768차원 임베딩과 Chroma 검색 |
 
 > [!NOTE]
-> 기본 모델은 `Qwen/Qwen3-4B-Instruct-2507`입니다. 다른 Qwen 모델로 교체할 때는 모델 상수와 장치별 메모리 설정을 함께 검증해야 합니다.
+> 기본 모델은 `Qwen/Qwen3-8B`입니다. 다른 Qwen 모델로 교체할 때는 모델 상수와 장치별 메모리 설정을 함께 검증해야 합니다.
 
 ### 데이터와 개발 보조도구
 
@@ -184,7 +184,7 @@ flowchart LR
 | 영역 | 기술 |
 |---|---|
 | 백엔드 | Python 3.12 이상, FastAPI, Pydantic, Uvicorn |
-| 로컬 생성 모델 | `Qwen/Qwen3-4B-Instruct-2507`, Transformers 5.12.1, PyTorch 2.12.1, Accelerate 1.14.0 |
+| 로컬 생성 모델 | `Qwen/Qwen3-8B`, Transformers 5.12.1, PyTorch 2.12.1, Accelerate 1.14.0 |
 | 생성 방식 | Thinking 비활성화, `do_sample=False` 결정적 생성, 최대 1,024 새 토큰 |
 | 검색 | ChromaDB 1.5.9, Sentence Transformers 5.6.1, KR-SBERT |
 | 데이터 처리 | NumPy 2.x, pandas 3.0.3, PyArrow 24.0.0 |
@@ -203,10 +203,10 @@ flowchart LR
 - 최신 Chromium 기반 Chrome
 - 최초 모델·임베딩·페르소나 다운로드를 위한 네트워크 연결
 - Hugging Face 캐시와 런타임 파일을 저장할 충분한 디스크 공간
-- 로컬 Qwen3-4B Instruct 실행을 위한 CUDA GPU 권장
+- 로컬 Qwen3-8B 실행을 위한 CUDA GPU 권장
 
 > [!NOTE]
-> 현재 CUDA 경로는 Qwen3-4B Instruct BF16 원본 가중치를 `device_map="auto"`로 배치하며, 코드에 GPU 9GiB와 CPU 22GiB의 메모리 상한이 설정되어 있습니다. 이는 개발 환경에 맞춘 값입니다. Apple Silicon MPS와 CPU 경로도 존재하지만 전체 모델을 단일 장치로 이동하므로 메모리 부족 또는 매우 느린 실행이 발생할 수 있습니다.
+> 현재 CUDA 경로는 Qwen3-8B BF16 원본 가중치를 `device_map="auto"`로 배치하며, 코드에 GPU 9GiB와 CPU 22GiB의 메모리 상한이 설정되어 있습니다. 이는 개발 환경에 맞춘 값입니다. Apple Silicon MPS와 CPU 경로도 존재하지만 전체 모델을 단일 장치로 이동하므로 메모리 부족 또는 매우 느린 실행이 발생할 수 있습니다.
 
 ## 설치 및 실행
 
@@ -280,7 +280,7 @@ Vite 개발 서버는 `/api` 요청을 `http://127.0.0.1:8000`으로 프록시�
 ### 최초 실행 시 준비되는 자산
 
 - 첫 페르소나 옵션·후보 요청에서 `nvidia/Nemotron-Personas-Korea` Parquet을 `data/raw/personas/`에 다운로드합니다.
-- 첫 정책 필드 추출 또는 시뮬레이션에서 `Qwen/Qwen3-4B-Instruct-2507`을 Hugging Face 캐시에 다운로드합니다.
+- 첫 정책 필드 추출 또는 시뮬레이션에서 `Qwen/Qwen3-8B`를 Hugging Face 캐시에 다운로드합니다.
 - 첫 유사도 검색에서 필요한 KR-SBERT 모델이 캐시에 없으면 다운로드합니다.
 - 정책·민원 Chroma 인덱스 본체와 manifest는 저장소에 포함되어 있습니다.
 - 일반적인 시뮬레이션 실행에는 환경변수가 필요하지 않습니다.
@@ -541,8 +541,8 @@ python scripts/verify_submission.py
 
 | 자산 | 결과보고서 기재 내용 | 조치 |
 |---|---|---|
-| `Qwen/Qwen3-4B-Instruct-2507` | Apache-2.0 | 기본 생성 모델의 파일·고지 조건 확인 |
-| `Qwen/Qwen3-8B` | Apache-2.0 | 대체 사용 시 모델 파일·고지 조건 확인 |
+| `Qwen/Qwen3-8B` | Apache-2.0 | 기본 생성 모델의 파일·고지 조건 확인 |
+| `Qwen/Qwen3-4B-Instruct-2507` | Apache-2.0 | 대체 사용 시 모델 파일·고지 조건 확인 |
 | `snunlp/KR-SBERT-V40K-klueNLI-augSTS` | 모델 카드에 명시적 라이선스 없음 | 제출·배포 전 이용·재배포 권한 확인 |
 | `nvidia/Nemotron-Personas-Korea` | CC BY 4.0 | 저작자 표시와 라이선스 조건 준수 |
 | 정부24 정책·공개 민원 Q&A | 검색 참고자료 | 원천별 이용 조건과 출처 고지 확인 |

@@ -40,7 +40,7 @@ class _Model:
 
 
 class QwenModelTest(unittest.TestCase):
-    def test_cuda_loads_qwen3_4b_instruct_with_cpu_offload(self) -> None:
+    def test_cuda_loads_qwen3_8b_with_cpu_offload(self) -> None:
         tokenizer = MagicMock()
         model = MagicMock()
 
@@ -67,7 +67,7 @@ class QwenModelTest(unittest.TestCase):
         )
         model.to.assert_not_called()
         model.eval.assert_called_once_with()
-        self.assertEqual(llm.model_name, "Qwen/Qwen3-4B-Instruct-2507")
+        self.assertEqual(llm.model_name, "Qwen/Qwen3-8B")
 
     def test_structured_generation_is_deterministic(self) -> None:
         llm = LLM.__new__(LLM)
