@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""정책 코퍼스를 검증해 Chroma 인덱스를 만들고 원자적으로 활성화한다.
+
+지정한 원천에서 정책을 읽어 ID와 등록일, 인덱스 정합성을 확인한 뒤 임시
+디렉터리에 완성된 결과만 활성 경로로 교체해 실패 시 기존 인덱스를 보존한다.
+"""
+
 import argparse
 import hashlib
 import json

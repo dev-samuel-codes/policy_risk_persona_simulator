@@ -187,6 +187,7 @@ function DirectPolicyForm({
   );
 }
 
+/** 백엔드 citizen_results 항목을 대화 UI의 공통 프로필 형태로 정규화한다. */
 function buildCitizenProfile(result, index) {
   const summary = result.persona_summary ?? {};
   const persona = result.persona ?? {};
@@ -227,6 +228,7 @@ function extractCivilServantField(response, label) {
   return plainMatch?.[1]?.trim() || null;
 }
 
+/** 백엔드 civil_servant_results 항목을 시민과 같은 프로필 형태로 정규화한다. */
 function buildCivilServantProfile(result, index) {
   const response = typeof result.response === "string" ? result.response.trim() : "";
   const persona = result.persona ?? {};
@@ -667,6 +669,7 @@ function PersonaDialogueView({
 }) {
   const [showSimilarPolicies, setShowSimilarPolicies] = useState(false);
   const [showOfficialReactions, setShowOfficialReactions] = useState(false);
+  // 서버의 1부터 시작하는 persona_index를 우선 사용하고, 이전 결과는 배열 순서로 대응한다.
   const visibleProfiles = profiles.flatMap((profile, index) => {
     if (!showOfficialReactions) return [profile];
 
@@ -837,6 +840,7 @@ export default function PolicyPage() {
     }
   };
 
+  // 생성 API 응답을 상태 조회 API의 작업 형태로 정규화한 뒤 폴링을 시작한다.
   const openSimulationScreen = (job) => {
     setSimulationJob({
       job_id: job.job_id,

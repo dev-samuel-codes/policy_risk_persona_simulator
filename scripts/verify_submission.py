@@ -35,6 +35,8 @@ REQUIRED_FILES = (
     "scripts/rag/build_civil_complaint_index.py",
 )
 
+# 제품 제출 범위에서 제거한 연구 산출물과 레거시 경로의 재유입 방지 목록이다.
+# 법령 관련 항목도 현행 기능이 아니라 제거 상태를 검증하기 위해 남겨 둔 이름이다.
 FORBIDDEN_PATHS = (
     "outputs",
     "experiments",

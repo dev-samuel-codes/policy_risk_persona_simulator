@@ -238,6 +238,10 @@ class PolicySimilarityService:
         min_score: float = DEFAULT_MIN_SCORE,
         as_of_date: str | None = None,
     ) -> dict[str, Any]:
+        """입력 정책과 내용이 유사한 공개 정책을 검색한다.
+
+        반환 점수는 검색 순위용 유사도이며 지원 적합성 판정이 아니다.
+        """
         if not 1 <= top_k <= 10:
             raise ValueError("top_k는 1에서 10 사이여야 합니다.")
         if not 0 <= min_score <= 1:

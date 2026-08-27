@@ -9,27 +9,25 @@ POLICY_DATA_DIR = PROJECT_ROOT / "data" / "raw" / "policies"
 ACTIVE_POLICY_PATH = PROJECT_ROOT / "data" / "runtime" / "active_policy.json"
 
 
-# JSON 파일을 하나 읽어서 안의 data 값 반환
 def load_json_data(file_name: str) -> list[dict]:
+    """정책 원천 JSON의 data 배열을 읽는다."""
     path = POLICY_DATA_DIR / file_name
-    payload = json.loads(path.read_text(encoding="utf-8"))  # 한글이 존재 -> utf-8
+    payload = json.loads(path.read_text(encoding="utf-8"))
 
     return payload["data"]
 
 
 def load_policies() -> list[dict]:
+    """목록·상세·지원조건 원천을 서비스 ID 기준으로 결합한다."""
     service_list = load_json_data("service_list.json")
     service_detail = load_json_data("service_detail.json")
     support_conditions = load_json_data("support_conditions.json")
 
-    # 상세 정보를 서비스id 기준 딕셔너리로 변환
     detail_by_id = {item["서비스ID"]: item for item in service_detail}
-
-    conditions_by_id = {  # 지원조건
+    conditions_by_id = {
         item["서비스ID"]: item for item in support_conditions
     }
 
-    # 최종 정책 리스트 생성
     policies = []
 
     for item in service_list:
@@ -46,8 +44,8 @@ def load_policies() -> list[dict]:
     return policies
 
 
-# 랜덤으로 정책 선택
 def get_random_policy(policies: list[dict]) -> dict:
+    """정책 목록에서 시뮬레이션 입력 하나를 무작위로 고른다."""
     return random.choice(policies)
 
 
@@ -63,6 +61,11 @@ def _optional_int(value: Any, field_name: str) -> int | None:
 
 
 def build_direct_policy(fields: Mapping[str, Any]) -> dict:
+    """직접 입력값을 검증해 시뮬레이션 내부 정책 스키마로 변환한다.
+
+    지역 범위와 연령 하한·상한 계약을 확인하고, 파이프라인이 소비하는
+    목록정보·상세정보·지원조건 구조를 반환한다.
+    """
     text_fields = {
         "policy_name",
         "target_audience",
@@ -149,6 +152,7 @@ def build_direct_policy(fields: Mapping[str, Any]) -> dict:
 
 
 def save_active_policy(policy: dict) -> None:
+    """검토가 끝난 정책을 활성 정책 파일로 원자적으로 저장한다."""
     ACTIVE_POLICY_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = ACTIVE_POLICY_PATH.with_suffix(".json.tmp")
     temporary_path.write_text(
@@ -158,6 +162,7 @@ def save_active_policy(policy: dict) -> None:
 
 
 def load_active_policy() -> dict | None:
+    """활성 정책을 읽고 파이프라인이 요구하는 기본 구조를 확인한다."""
     if not ACTIVE_POLICY_PATH.exists():
         return None
 
@@ -168,6 +173,7 @@ def load_active_policy() -> dict | None:
 
 
 def get_active_or_random_policy() -> dict:
+    """활성 정책이 없을 때만 원천 정책 중 하나를 대체 입력으로 사용한다."""
     active_policy = load_active_policy()
     if active_policy is not None:
         return active_policy

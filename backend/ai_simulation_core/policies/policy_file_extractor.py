@@ -24,7 +24,7 @@ MAX_EXTRACT_CHARS = 8000  # LLM 프롬프트에 넣을 원문 최대 길이
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".hwpx", ".txt", ".md"}
 
-# backend.api.DirectPolicyInput / policy_repository.build_direct_policy 와 동일한 키 순서.
+# 파일 추출 단계가 반환하는 직접 입력 필드. 지역·연령 조건은 검토 화면에서 별도로 입력한다.
 POLICY_FIELD_KEYS = (
     "policy_name",
     "target_audience",

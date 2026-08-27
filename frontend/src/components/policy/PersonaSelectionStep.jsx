@@ -272,6 +272,7 @@ export default function PersonaSelectionStep({
           );
         }
 
+        // 후보 응답이 배열이 아니면 빈 배열로 정규화해 렌더링 계약을 고정한다.
         setCandidates(Array.isArray(result?.candidates) ? result.candidates : []);
         setCandidateState("success");
       } catch (error) {
@@ -405,6 +406,8 @@ export default function PersonaSelectionStep({
       age_max: parseOptionalAge(ageMax),
       age_basis: "dataset_age",
     };
+    // random은 ID 없이 서버가 eligible 3명을 선택하고,
+    // manual은 선택한 3개 ID의 지역·연령 cohort를 서버가 다시 검증한다.
     const requestBody = {
       policy,
       selection_mode: selectionMode,
