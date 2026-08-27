@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from backend import api
 from backend.ai_simulation_core.simulations.civil_servant_simulation import (
-    run_civil_servant_simulation,
+    QUALITY_MODE,
+    build_grounded_response,
 )
 
 
@@ -67,11 +68,20 @@ class SimulationApiTest(unittest.TestCase):
                 "province": "서울",
                 "district": "서울-중구",
             }
-            official_result = run_civil_servant_simulation(
-                persona=official_persona,
-                policy=policy,
-                citizen_result=citizen_result,
-            )
+            basis, response = build_grounded_response(policy, citizen_result)
+            official_result = {
+                "official_persona_id": official_persona["uuid"],
+                "citizen_persona_id": persona_id,
+                "basis": basis,
+                "response": response,
+                "_validation_errors": [],
+                "_quality_gate": {
+                    "status": "passed",
+                    "mode": QUALITY_MODE,
+                    "removed_statements": 0,
+                    "generation_attempts": 1,
+                },
+            }
             citizen_results.append(citizen_result)
             official_results.append(
                 {
@@ -653,6 +663,92 @@ class SimulationApiTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "공무원 응답 1"):
             api.validate_completed_simulation_result(result, persona_ids)
+
+    def test_completed_result_integrity_rejects_invalid_official_quality_gate(
+        self,
+    ) -> None:
+        persona_ids = ["one", "two", "three"]
+        cases = [
+            {
+                "name": "wrong-mode",
+                "field": "mode",
+                "value": "deterministic_policy_grounded_v1",
+                "delete": False,
+            },
+            {
+                "name": "missing-generation-attempts",
+                "field": "generation_attempts",
+                "value": None,
+                "delete": True,
+            },
+            {
+                "name": "zero-generation-attempts",
+                "field": "generation_attempts",
+                "value": 0,
+                "delete": False,
+            },
+            {
+                "name": "too-many-generation-attempts",
+                "field": "generation_attempts",
+                "value": 4,
+                "delete": False,
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                result = self._completed_result(persona_ids)
+                gate = result["civil_servant_results"][0]["_quality_gate"]
+                if case["delete"]:
+                    gate.pop(case["field"])
+                else:
+                    gate[case["field"]] = case["value"]
+
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "OFFICIAL_QUALITY_GATE_INVALID",
+                ):
+                    api.validate_completed_simulation_result(result, persona_ids)
+
+    def test_completed_result_integrity_rejects_official_link_mutations(
+        self,
+    ) -> None:
+        persona_ids = ["one", "two", "three"]
+
+        def swap_citizen_links(result: dict) -> None:
+            officials = result["civil_servant_results"]
+            officials[0]["citizen_persona_id"], officials[1][
+                "citizen_persona_id"
+            ] = (
+                officials[1]["citizen_persona_id"],
+                officials[0]["citizen_persona_id"],
+            )
+
+        def mismatch_official_persona_id(result: dict) -> None:
+            result["civil_servant_results"][0][
+                "official_persona_id"
+            ] = "official-other"
+
+        cases = [
+            {
+                "name": "official-citizen-order-swapped",
+                "mutate": swap_citizen_links,
+                "error": "OFFICIAL_CITIZEN_LINK_MISMATCH",
+            },
+            {
+                "name": "official-id-does-not-match-nested-persona",
+                "mutate": mismatch_official_persona_id,
+                "error": "OFFICIAL_PERSONA_ID_MISMATCH",
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                result = self._completed_result(persona_ids)
+                case["mutate"](result)
+
+                with self.assertRaisesRegex(RuntimeError, case["error"]):
+                    api.validate_completed_simulation_result(result, persona_ids)
 
     def test_completed_result_integrity_rejects_partial_result(self) -> None:
         persona_ids = ["one", "two", "three"]

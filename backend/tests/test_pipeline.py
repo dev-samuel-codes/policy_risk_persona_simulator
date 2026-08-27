@@ -2,6 +2,10 @@ import unittest
 from unittest.mock import patch
 
 from backend.ai_simulation_core import pipeline
+from backend.ai_simulation_core.simulations.civil_servant_simulation import (
+    QUALITY_MODE,
+    build_grounded_response,
+)
 
 
 class PipelineResultTest(unittest.TestCase):
@@ -16,6 +20,32 @@ class PipelineResultTest(unittest.TestCase):
                 for _ in items
             ]
 
+        def grounded_official_result(
+            persona: dict,
+            policy: dict,
+            citizen_result: dict,
+        ) -> dict:
+            """파이프라인 테스트에서는 실제 Qwen 대신 검증 가능한 응답을 사용한다."""
+
+            basis, response = build_grounded_response(policy, citizen_result)
+            return {
+                "official_persona_id": str(persona.get("uuid") or ""),
+                "citizen_persona_id": str(
+                    citizen_result.get("persona_id")
+                    or citizen_result.get("persona", {}).get("uuid")
+                    or ""
+                ),
+                "basis": basis,
+                "response": response,
+                "_validation_errors": [],
+                "_quality_gate": {
+                    "status": "passed",
+                    "mode": QUALITY_MODE,
+                    "removed_statements": 0,
+                    "generation_attempts": 1,
+                },
+            }
+
         search_patcher = patch.object(
             pipeline,
             "find_similar_complaint_cases_batch",
@@ -23,6 +53,14 @@ class PipelineResultTest(unittest.TestCase):
         )
         self.complaint_search = search_patcher.start()
         self.addCleanup(search_patcher.stop)
+
+        official_patcher = patch.object(
+            pipeline,
+            "run_civil_servant_simulation",
+            side_effect=grounded_official_result,
+        )
+        self.official_simulation = official_patcher.start()
+        self.addCleanup(official_patcher.stop)
 
     def test_citizen_result_keeps_selected_persona(self) -> None:
         policy = {"상세정보": {"서비스명": "청년 주거 지원"}}
@@ -301,6 +339,11 @@ class PipelineResultTest(unittest.TestCase):
             {"uuid": "lower-boundary", "age": 18},
             {"uuid": "upper-boundary", "age": 35},
         ]
+        official_personas = [
+            {"uuid": "official-1", "occupation": "일반 행정 공무원"},
+            {"uuid": "official-2", "occupation": "일반 행정 공무원"},
+            {"uuid": "official-3", "occupation": "일반 행정 공무원"},
+        ]
 
         def citizen_result(persona: dict, policy: dict) -> dict:
             return {
@@ -313,11 +356,7 @@ class PipelineResultTest(unittest.TestCase):
             patch.object(
                 pipeline,
                 "get_civil_servant_persona",
-                return_value=[
-                    {"uuid": "official-1", "occupation": "일반 행정 공무원"},
-                    {"uuid": "official-2", "occupation": "일반 행정 공무원"},
-                    {"uuid": "official-3", "occupation": "일반 행정 공무원"},
-                ],
+                return_value=official_personas,
             ) as officials,
             patch.object(
                 pipeline,
@@ -343,6 +382,42 @@ class PipelineResultTest(unittest.TestCase):
             ["eligible", "lower-boundary", "upper-boundary"],
         )
         self.assertEqual(len(result["civil_servant_results"]), 3)
+        self.assertEqual(
+            [
+                item["citizen_persona_id"]
+                for item in result["civil_servant_results"]
+            ],
+            ["eligible", "lower-boundary", "upper-boundary"],
+        )
+        self.assertEqual(
+            [
+                item["official_persona_id"]
+                for item in result["civil_servant_results"]
+            ],
+            ["official-1", "official-2", "official-3"],
+        )
+        self.assertEqual(
+            [
+                item["persona_index"]
+                for item in result["civil_servant_results"]
+            ],
+            [1, 2, 3],
+        )
+        self.assertEqual(self.official_simulation.call_count, 3)
+        for index, official_call in enumerate(
+            self.official_simulation.call_args_list
+        ):
+            with self.subTest(official_call=index + 1):
+                self.assertEqual(official_call.args, ())
+                self.assertIs(
+                    official_call.kwargs["persona"],
+                    official_personas[index],
+                )
+                self.assertIs(official_call.kwargs["policy"], policy)
+                self.assertIs(
+                    official_call.kwargs["citizen_result"],
+                    result["citizen_results"][index],
+                )
         self.complaint_search.assert_called_once()
         search_items = self.complaint_search.call_args.args[0]
         self.assertEqual(
@@ -510,8 +585,9 @@ class PipelineResultTest(unittest.TestCase):
                     "_validation_errors": [],
                     "_quality_gate": {
                         "status": "passed",
-                        "mode": "deterministic_policy_grounded_v1",
+                        "mode": "qwen_policy_grounded_v1",
                         "removed_statements": 0,
+                        "generation_attempts": 1,
                     },
                 },
             ),

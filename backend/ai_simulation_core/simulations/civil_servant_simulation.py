@@ -1,13 +1,76 @@
-"""정책 원문에만 근거한 공무원 답변을 만든다."""
+"""Qwen으로 생성한 공무원 답변을 정책 원문에 맞게 검증한다."""
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
+from backend.ai_simulation_core.llm.llm_gateway import run_llm
+from backend.ai_simulation_core.prompts.civil_servant_prompt import (
+    civil_servant_prompt,
+)
+from backend.ai_simulation_core.simulations.citizen_quality import (
+    validate_policy_grounded_text,
+)
 
-QUALITY_MODE = "deterministic_policy_grounded_v1"
+
+QUALITY_MODE = "qwen_policy_grounded_v1"
 INACTIVE_OFFICIAL_MARKERS = ("전직", "퇴직", "은퇴", "구직")
+_OFFICIAL_COMMITMENT_PATTERN = re.compile(
+    r"(?:승인|선정|지급|수급|연장)"
+    r"(?:하겠습니다|해\s*드리겠습니다|되도록\s*하겠습니다|"
+    r"을\s*(?:보장|확정|처리)하겠습니다)|"
+    r"(?:지원\s*)?대상자(?:로)?\s*(?:처리|등록|확정)"
+    r"(?:하겠습니다|해\s*드리겠습니다)"
+)
+_OFFICIAL_RISK_SCORING_PATTERN = re.compile(
+    r"민원\s*(?:점수|위험도|리스크)|"
+    r"(?:리스크|위험도)(?:\s*(?:점수|평가|등급))?|"
+    r"정책\s*집행\s*(?:평가|위험|리스크)|"
+    r"(?:위험|리스크)\s*점수|점수화"
+)
+_BASIS_RESPONSE_ANCHORS = {
+    "지원대상": re.compile(r"지원\s*대상|대상자|자격"),
+    "선정기준": re.compile(r"선정\s*기준|심사\s*기준"),
+    "지원내용": re.compile(
+        r"지원\s*(?:내용|규모|금액|혜택|기간|여부)|지원금|실효성|주거\s*부담"
+    ),
+    "신청방법": re.compile(
+        r"신청\s*(?:방법|절차|경로|방식)|접수\s*(?:방법|경로)|"
+        r"온라인\s*신청|방문\s*신청"
+    ),
+    "신청기한": re.compile(
+        r"신청\s*(?:기한|기간)|접수\s*(?:기한|기간)|마감|"
+        r"기한\s*변경|준비\s*기간"
+    ),
+    "구비서류": re.compile(
+        r"구비\s*서류|제출\s*서류|필요(?:한)?\s*서류|신청서류|"
+        r"서류\s*(?:발급|제출|준비)"
+    ),
+    "제외조건": re.compile(r"제외\s*(?:조건|대상)|탈락\s*조건"),
+    "문의처": re.compile(
+        r"문의처|연락처|문의\s*(?:기관|방법)|담당\s*(?:기관|부서)"
+    ),
+    "정보미제공": re.compile(
+        r"명시되어\s*있지|정보(?:가|는)?\s*없|정보\s*미제공|"
+        r"입력에\s*없|제공된\s*내용만으로"
+    ),
+    "개인상황": re.compile(
+        r"개인\s*(?:상황|사정)|전체\s*자격|실제\s*(?:선정|승인)|공식\s*심사"
+    ),
+}
+_SAFE_GENERAL_RESPONSE_PATTERN = re.compile(
+    r"민원(?:\s*내용)?(?:을|이)?.{0,12}(?:확인|검토)|"
+    r"(?:입력된|제공된)\s*(?:정책|내용).{0,36}(?:확정할\s*수\s*없|확인\s*필요)|"
+    r"정책\s*원문.{0,24}(?:확인|근거)"
+)
+_STRUCTURED_FRAGMENT_PATTERN = re.compile(
+    r"```|</?[^<>\n]+>|[{}]|"
+    r"[\"']?response[\"']?\s*:|"
+    r"\[\s*(?:\{|\[|\"|'|-?\d|true\b|false\b|null\b)",
+    re.IGNORECASE,
+)
 
 _FIELD_KEYS = {
     "지원대상": "지원대상",
@@ -254,6 +317,81 @@ def build_grounded_response(policy: dict, citizen_result: dict) -> tuple[str, st
     return basis, "민원 내용을 확인했습니다. " + body
 
 
+def parse_civil_servant_response(raw_output: str) -> str | None:
+    """Qwen의 JSON·코드 펜스·평문 출력을 답변 본문 문자열로 정규화한다."""
+
+    if not isinstance(raw_output, str):
+        return None
+    cleaned = raw_output.strip()
+    if not cleaned:
+        return None
+    was_fenced = False
+    fenced = re.fullmatch(
+        r"```(?:json)?\s*(.*?)\s*```",
+        cleaned,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if fenced:
+        was_fenced = True
+        cleaned = fenced.group(1).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        if was_fenced or _STRUCTURED_FRAGMENT_PATTERN.search(cleaned):
+            return None
+        return cleaned
+
+    if isinstance(parsed, dict):
+        response = parsed.get("response")
+        return (
+            response.strip()
+            if isinstance(response, str) and response.strip()
+            else None
+        )
+    if isinstance(parsed, str) and parsed.strip():
+        return parsed.strip()
+    return None
+
+
+def _citizen_complaint_text(citizen_result: dict) -> str:
+    complaint = _complaint(citizen_result)
+    return "\n".join(
+        f"{label}: {_text(complaint.get(field))}"
+        for field, label in (
+            ("complaint_text", "민원 요지"),
+            ("dialogue", "민원 발언"),
+        )
+        if _text(complaint.get(field))
+    )
+
+
+def _response_addresses_basis(response: str, basis: str) -> bool:
+    expected_pattern = _BASIS_RESPONSE_ANCHORS.get(basis)
+    if expected_pattern is None:
+        return False
+    if expected_pattern.search(response):
+        return True
+
+    # 다른 구체 필드만 답한 경우 일반적인 확인 문구가 있어도 통과시키지 않는다.
+    concrete_bases = (
+        "지원대상",
+        "선정기준",
+        "지원내용",
+        "신청방법",
+        "신청기한",
+        "구비서류",
+        "제외조건",
+        "문의처",
+    )
+    if any(
+        other_basis != basis and _BASIS_RESPONSE_ANCHORS[other_basis].search(response)
+        for other_basis in concrete_bases
+    ):
+        return False
+    return bool(_SAFE_GENERAL_RESPONSE_PATTERN.search(response))
+
+
 def validate_civil_servant_response(
     result: object,
     *,
@@ -268,7 +406,7 @@ def validate_civil_servant_response(
     official_id = _text(persona.get("uuid"))
     occupation = _text(persona.get("occupation"))
     citizen_id = _citizen_persona_id(citizen_result)
-    expected_basis, expected_response = build_grounded_response(policy, citizen_result)
+    expected_basis, _ = build_grounded_response(policy, citizen_result)
 
     if not official_id or _text(result.get("official_persona_id")) != official_id:
         errors.append("OFFICIAL_PERSONA_ID_MISMATCH")
@@ -280,42 +418,116 @@ def validate_civil_servant_response(
         errors.append("OFFICIAL_CITIZEN_LINK_MISMATCH")
     if _text(result.get("basis")) != expected_basis:
         errors.append("OFFICIAL_BASIS_MISMATCH")
-    if _text(result.get("response")) != expected_response:
-        errors.append("OFFICIAL_RESPONSE_NOT_GROUNDED")
+    response = _text(result.get("response"))
+    if not response:
+        errors.append("OFFICIAL_RESPONSE_EMPTY")
+    else:
+        citizen_persona = citizen_result.get("persona")
+        if not isinstance(citizen_persona, dict):
+            citizen_persona = {}
+        errors.extend(
+            validate_policy_grounded_text(
+                response,
+                citizen_persona,
+                policy,
+                path="official.response",
+            )
+        )
+        if not _response_addresses_basis(response, expected_basis):
+            errors.append("OFFICIAL_BASIS_UNADDRESSED")
+        if _OFFICIAL_COMMITMENT_PATTERN.search(response):
+            errors.append("UNSUPPORTED_OFFICIAL_COMMITMENT")
+        if _OFFICIAL_RISK_SCORING_PATTERN.search(response):
+            errors.append("OFFICIAL_RISK_SCORING_CONTENT")
     if result.get("_validation_errors") != []:
         errors.append("OFFICIAL_VALIDATION_ERRORS_NOT_EMPTY")
     gate = result.get("_quality_gate")
     if not isinstance(gate, dict) or gate.get("status") != "passed":
         errors.append("OFFICIAL_QUALITY_GATE_NOT_PASSED")
-    elif gate.get("mode") != QUALITY_MODE or gate.get("removed_statements") != 0:
+    elif (
+        gate.get("mode") != QUALITY_MODE
+        or gate.get("removed_statements") != 0
+        or not isinstance(gate.get("generation_attempts"), int)
+        or not 1 <= gate["generation_attempts"] <= 3
+    ):
         errors.append("OFFICIAL_QUALITY_GATE_INVALID")
-    return errors
+    return list(dict.fromkeys(errors))
 
 
 def run_civil_servant_simulation(
     persona: dict,
     policy: dict,
     citizen_result: dict,
+    max_retries: int = 3,
 ) -> dict:
-    basis, response = build_grounded_response(policy, citizen_result)
-    result = {
-        "official_persona_id": _text(persona.get("uuid")),
-        "citizen_persona_id": _citizen_persona_id(citizen_result),
-        "basis": basis,
-        "response": response,
-        "_validation_errors": [],
-        "_quality_gate": {
-            "status": "passed",
-            "mode": QUALITY_MODE,
-            "removed_statements": 0,
-        },
-    }
-    errors = validate_civil_servant_response(
-        result,
-        persona=persona,
-        policy=policy,
-        citizen_result=citizen_result,
+    if not 1 <= max_retries <= 3:
+        raise ValueError("공무원 응답 재시도 횟수는 1 이상 3 이하여야 합니다.")
+    basis, grounded_response = build_grounded_response(policy, citizen_result)
+    official_id = _text(persona.get("uuid"))
+    citizen_id = _citizen_persona_id(citizen_result)
+    occupation = _text(persona.get("occupation"))
+    input_errors = []
+    if not official_id:
+        input_errors.append("OFFICIAL_PERSONA_ID_MISMATCH")
+    if "공무원" not in occupation or any(
+        marker in occupation for marker in INACTIVE_OFFICIAL_MARKERS
+    ):
+        input_errors.append("OFFICIAL_PERSONA_NOT_ACTIVE")
+    if not citizen_id:
+        input_errors.append("OFFICIAL_CITIZEN_LINK_MISMATCH")
+    if input_errors:
+        raise RuntimeError("공무원 응답 품질 검증 실패: " + ", ".join(input_errors))
+
+    complaint_text = _citizen_complaint_text(citizen_result)
+    validation_feedback: list[str] | None = None
+    last_errors: list[str] = []
+    for attempt in range(1, max_retries + 1):
+        prompt = civil_servant_prompt(
+            persona,
+            policy,
+            complaint_text,
+            grounded_response,
+            validation_feedback=validation_feedback,
+        )
+        raw_output = run_llm(prompt)
+        response = parse_civil_servant_response(raw_output)
+        if response is None:
+            last_errors = ["OFFICIAL_RESPONSE_PARSE_ERROR"]
+            validation_feedback = last_errors
+            print(
+                f"  [공무원 시도 {attempt}/{max_retries}] "
+                "응답 파싱 실패, 재시도"
+            )
+            continue
+
+        result = {
+            "official_persona_id": official_id,
+            "citizen_persona_id": citizen_id,
+            "basis": basis,
+            "response": response,
+            "_validation_errors": [],
+            "_quality_gate": {
+                "status": "passed",
+                "mode": QUALITY_MODE,
+                "removed_statements": 0,
+                "generation_attempts": attempt,
+            },
+        }
+        last_errors = validate_civil_servant_response(
+            result,
+            persona=persona,
+            policy=policy,
+            citizen_result=citizen_result,
+        )
+        if not last_errors:
+            return result
+        validation_feedback = last_errors
+        print(
+            f"  [공무원 시도 {attempt}/{max_retries}] "
+            f"검증 실패: {last_errors}"
+        )
+
+    raise RuntimeError(
+        "공무원 응답 품질 검증 실패: "
+        + ", ".join(last_errors or ["OFFICIAL_RESPONSE_UNKNOWN_ERROR"])
     )
-    if errors:
-        raise RuntimeError("공무원 응답 품질 검증 실패: " + ", ".join(errors))
-    return result

@@ -954,6 +954,248 @@ def _validate_policy_facts(
     return errors
 
 
+_DOCUMENT_ALIAS_PARTICLES = (
+    "으로는",
+    "에서는",
+    "이라는",
+    "이라고",
+    "입니다",
+    "인지",
+    "이며",
+    "이고",
+    "으로",
+    "에서",
+    "부터",
+    "까지",
+    "이나",
+    "처럼",
+    "보다",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "과",
+    "와",
+    "도",
+    "만",
+    "의",
+    "로",
+    "에",
+)
+_PHONE_CONTACT_PATTERN = re.compile(
+    r"(?<!\d)(?:\+?82[-.\s]?)?"
+    r"(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}|"
+    r"0\d{1,2}[-.\s]?\d{2,4}|1\d{2,3}[-.\s]?\d{3,4})(?!\d)"
+)
+_BARE_HOTLINE_PATTERN = re.compile(r"(?<!\d)1\d{2,3}(?!\d)")
+_EMAIL_CONTACT_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.+-])[A-Za-z0-9_.+-]+@"
+    r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9_.-])",
+    re.IGNORECASE,
+)
+_URL_CONTACT_PATTERN = re.compile(
+    r"(?:https?://|www\.)[^\s<>\"']+",
+    re.IGNORECASE,
+)
+_AGENCY_NAME_PATTERN = re.compile(
+    r"(?<![가-힣A-Za-z0-9·])"
+    r"([가-힣A-Za-z0-9·]{2,20}"
+    r"(?:\s+[가-힣A-Za-z0-9·]{2,20})?\s*"
+    r"(?:행정복지센터|주민센터|복지센터|지원센터|"
+    r"지원과|지원팀|복지과|정책과|행정과|주거과|"
+    r"사업부|복지부|행정부|센터|공단|공사|위원회|재단|"
+    r"복지관|구청|시청|도청|군청|기관|부서))"
+)
+_GENERIC_AGENCY_NAMES = {
+    "담당기관",
+    "해당기관",
+    "공식기관",
+    "관계기관",
+    "관련기관",
+    "소관기관",
+    "운영기관",
+    "신청기관",
+    "문의기관",
+    "담당부서",
+    "해당부서",
+    "관계부서",
+    "관련부서",
+    "소관부서",
+}
+_GENERIC_AGENCY_ROLE_PATTERN = re.compile(
+    r"(?:(?:해당|본|이|입력된)?(?:사업|정책)(?:의)?)?"
+    r"(?:담당|소관|관계|관련|운영|신청|문의)(?:기관|부서)$"
+)
+_CONTACT_CONTEXT_PATTERN = re.compile(r"문의|연락|상담|담당|전화|콜센터")
+
+
+def _is_token_character(value: str) -> bool:
+    return bool(value) and (value.isalnum() or "가" <= value <= "힣")
+
+
+def _contains_document_alias(sentence: str, alias: str) -> bool:
+    """조사 결합은 허용하되 `신청서류` 같은 더 긴 명사의 부분일치는 막는다."""
+
+    normalized_sentence = unicodedata.normalize("NFKC", sentence)
+    alias_parts = re.split(r"\s+", unicodedata.normalize("NFKC", alias).strip())
+    alias_pattern = re.compile(
+        r"\s*".join(re.escape(part) for part in alias_parts),
+        re.IGNORECASE,
+    )
+    for match in alias_pattern.finditer(normalized_sentence):
+        before = normalized_sentence[match.start() - 1 : match.start()]
+        if _is_token_character(before):
+            continue
+        tail = normalized_sentence[match.end() :]
+        if not tail or not _is_token_character(tail[0]):
+            return True
+        for particle in _DOCUMENT_ALIAS_PARTICLES:
+            if not tail.startswith(particle):
+                continue
+            after_particle = tail[len(particle) : len(particle) + 1]
+            if not _is_token_character(after_particle):
+                return True
+    return False
+
+
+def _phone_contact_values(text: str) -> set[str]:
+    values = {
+        re.sub(r"\D", "", match.group())
+        for match in _PHONE_CONTACT_PATTERN.finditer(text)
+    }
+    for match in _BARE_HOTLINE_PATTERN.finditer(text):
+        window = text[max(0, match.start() - 24) : match.end() + 24]
+        if _CONTACT_CONTEXT_PATTERN.search(window):
+            values.add(match.group())
+    return values
+
+
+def _normalized_urls(text: str) -> set[str]:
+    return {
+        match.group().rstrip(".,);]}").lower()
+        for match in _URL_CONTACT_PATTERN.finditer(text)
+    }
+
+
+def _validate_grounded_contact_facts(
+    entries: list[tuple[str, str]],
+    policy: dict,
+) -> list[str]:
+    """정책 원문에 없는 전화·URL·이메일·담당기관 생성을 차단한다."""
+
+    policy_source = json.dumps(policy, ensure_ascii=False, default=str)
+    policy_phones = _phone_contact_values(policy_source)
+    policy_urls = _normalized_urls(policy_source)
+    policy_emails = {
+        match.group().lower() for match in _EMAIL_CONTACT_PATTERN.finditer(policy_source)
+    }
+    normalized_policy = _normalize(policy_source)
+    application_channels = _known_application_channels(
+        _policy_detail(policy).get("신청방법")
+    )
+    errors: list[str] = []
+
+    for path, sentence in _sentences(entries):
+        if _phone_contact_values(sentence).difference(policy_phones):
+            errors.append(f"UNSUPPORTED_CONTACT_FACT:PHONE:{path}")
+        if _normalized_urls(sentence).difference(policy_urls):
+            errors.append(f"UNSUPPORTED_CONTACT_FACT:URL:{path}")
+        sentence_emails = {
+            match.group().lower()
+            for match in _EMAIL_CONTACT_PATTERN.finditer(sentence)
+        }
+        if sentence_emails.difference(policy_emails):
+            errors.append(f"UNSUPPORTED_CONTACT_FACT:EMAIL:{path}")
+
+        for match in _AGENCY_NAME_PATTERN.finditer(sentence):
+            agency = _normalize(match.group(1))
+            if (
+                agency in _GENERIC_AGENCY_NAMES
+                or _GENERIC_AGENCY_ROLE_PATTERN.fullmatch(agency)
+                or agency in normalized_policy
+            ):
+                continue
+            if (
+                "visit" in application_channels
+                and ("주민센터" in agency or "행정복지센터" in agency)
+            ):
+                continue
+            errors.append(f"UNSUPPORTED_CONTACT_FACT:AGENCY:{path}")
+    return errors
+
+
+def _validate_grounded_document_and_channel_facts(
+    entries: list[tuple[str, str]],
+    policy: dict,
+) -> list[str]:
+    """정책에 없는 구비서류 이름과 신청 채널의 단정적 추가를 검출한다."""
+
+    detail = _policy_detail(policy)
+    required_documents = _text(detail.get("구비서류"))
+    application_method = _text(detail.get("신청방법"))
+    known_documents = set(canonical_document_names(required_documents))
+    channel_patterns = {
+        **_KNOWN_APPLICATION_CHANNEL_PATTERNS,
+        "phone": re.compile(r"전화"),
+        "email": re.compile(r"이메일|전자우편"),
+        "post": re.compile(r"우편"),
+        "fax": re.compile(r"팩스"),
+        "government24": re.compile(r"정부24"),
+        "district_office": re.compile(r"구청"),
+        "city_hall": re.compile(r"시청"),
+    }
+    known_channels = {
+        name
+        for name, pattern in channel_patterns.items()
+        if pattern.search(application_method)
+    }
+
+    errors: list[str] = []
+    for path, sentence in _sentences(entries):
+        for _, aliases, canonical in _DOCUMENT_CONCEPTS:
+            if canonical in known_documents:
+                continue
+            if any(_contains_document_alias(sentence, alias) for alias in aliases):
+                errors.append(
+                    f"UNSUPPORTED_POLICY_FACT:구비서류:{path}:{canonical}"
+                )
+
+        if not re.search(r"신청|접수", sentence):
+            continue
+        sentence_channels = {
+            name
+            for name, pattern in channel_patterns.items()
+            if pattern.search(sentence)
+        }
+        for channel in sorted(sentence_channels.difference(known_channels)):
+            errors.append(f"UNSUPPORTED_POLICY_FACT:신청방법:{path}:{channel}")
+    return errors
+
+
+def validate_policy_grounded_text(
+    text: str,
+    persona: dict,
+    policy: dict,
+    *,
+    path: str = "response",
+) -> list[str]:
+    """단일 생성 문장의 정책·페르소나 근거 위반을 공개 API로 검사한다."""
+
+    if not isinstance(text, str) or not text.strip():
+        return [f"POLICY_GROUNDED_TEXT_EMPTY:{path}"]
+    entries = [(path, text.strip())]
+    errors = [
+        *_validate_structured_eligibility(entries, persona, policy),
+        *_validate_policy_facts(entries, persona, policy),
+        *_validate_grounded_contact_facts(entries, policy),
+        *_validate_grounded_document_and_channel_facts(entries, policy),
+        *_validate_persona_facts(entries, persona),
+    ]
+    return list(dict.fromkeys(errors))
+
+
 def _validate_persona_facts(
     entries: list[tuple[str, str]],
     persona: dict,
