@@ -1,9 +1,9 @@
-"""Strict, provenance-bound reference search for generated complaints.
+"""Complaint-text similarity search for public-FAQ reference examples.
 
-Dense similarity only retrieves candidates.  A candidate is never exposed until
-region, domain, intent, exclusive qualification, age relationship, and all
-shared score floors pass.  This prevents a superficially similar public FAQ
-from being presented as evidence for a different policy or population.
+Reference eligibility is based on semantic similarity between the generated
+complaint text and each public FAQ document, with a lightweight core-topic check
+to prevent generic words such as "support" from connecting unrelated subjects.
+Policy region, age, and qualification metadata never block a result.
 """
 
 from __future__ import annotations
@@ -40,21 +40,29 @@ ACTIVE_POINTER_FILENAME = "active.json"
 ACTIVE_POINTER_SCHEMA_VERSION = 1
 ACTIVE_RELOAD_STRATEGY = "detect_active_pointer_per_request"
 
-# Retrieval and UI share these exact boundaries.  Do not duplicate literals in
-# callers: boundary behavior is covered by dedicated tests.
-COMPLAINT_DENSE_FLOOR = 0.50
-POLICY_DENSE_FLOOR = 0.50
-SEMANTIC_FLOOR = 0.55
-FINAL_SCORE_FLOOR = 0.62
-UI_REFERENCE_SCORE_FLOOR = 0.68
+# Eligibility uses the generated complaint's dense similarity plus a core-topic
+# overlap check. The legacy component constants remain in the response contract,
+# but policy, lexical, and context scores do not change the displayed score.
+COMPLAINT_DENSE_FLOOR = 0.40
+POLICY_DENSE_FLOOR = 0.0
+SEMANTIC_FLOOR = 0.40
+FINAL_SCORE_FLOOR = 0.40
+UI_REFERENCE_SCORE_FLOOR = 0.40
+COMPLAINT_SEMANTIC_WEIGHT = 1.0
+POLICY_SEMANTIC_WEIGHT = 0.0
+FINAL_SEMANTIC_WEIGHT = 1.0
+FINAL_LEXICAL_WEIGHT = 0.0
+FINAL_CONTEXT_WEIGHT = 0.0
+TOPIC_LEXICAL_FLOOR = 0.08
 SCORE_EPSILON = 1e-7
 
 MAX_TOP_K = 5
-MIN_CANDIDATE_COUNT = 100
+MIN_CANDIDATE_COUNT = 300
 MAX_CANDIDATE_COUNT = 300
 CANDIDATE_MULTIPLIER = 50
 
 COMMON_WARNINGS = [
+    "현재 정책의 지역·연령·분야·자격 조건과 관계없이 민원 문구 유사도만으로 제시된 사례입니다.",
     "공개 FAQ의 유사 사례일 뿐 동일한 자격 판정이나 처리 결과를 보장하지 않습니다.",
     "검색 신뢰도는 최대 medium이며 시민 여론이나 민원 발생률 예측으로 사용할 수 없습니다.",
 ]
@@ -241,6 +249,21 @@ DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+DOMAIN_LABELS = {
+    "housing": "주거·월세",
+    "employment": "취업·고용",
+    "education": "교육",
+    "health": "건강·의료",
+    "family_care": "가족·돌봄",
+    "agriculture_fisheries": "농어업",
+    "transport": "교통",
+    "business_finance": "소상공·금융",
+    "tax": "세금",
+    "environment": "환경",
+    "culture_sports": "문화·체육",
+    "legal_administration": "행정·증명",
+}
+
 ISSUE_PATTERNS: dict[str, tuple[str, ...]] = {
     "eligibility": (
         "자격",
@@ -260,10 +283,18 @@ ISSUE_PATTERNS: dict[str, tuple[str, ...]] = {
         "구비서류",
         "신청서류",
         "제출서류",
+        "제출 서류",
+        "제출할 서류",
+        "제출해야 하는 서류",
         "필요한 서류",
         "필요 서류",
+        "서류 준비",
+        "서류 제출",
+        "서류를 제출",
         "증빙서류",
         "증명서류",
+        "계약서",
+        "거주 증명",
     ),
     "application_method": (
         "신청방법",
@@ -273,6 +304,16 @@ ISSUE_PATTERNS: dict[str, tuple[str, ...]] = {
         "접수방법",
         "접수 방법",
         "어떻게 신청",
+        "제출절차",
+        "제출 절차",
+        "제출방법",
+        "제출 방법",
+        "발급절차",
+        "발급 절차",
+        "어디서 발급",
+        "어디에서 발급",
+        "어떻게 제출",
+        "발급처",
     ),
     "deadline": (
         "신청기간",
@@ -521,6 +562,32 @@ def lexical_score(left: object, right: object) -> float:
     )
 
 
+def _topic_overlap_evidence(
+    query_text: object,
+    candidate_heading: object,
+    *,
+    lexical: float,
+) -> tuple[bool, dict[str, Any]]:
+    query_domains = domain_tags(query_text)
+    candidate_domains = domain_tags(candidate_heading)
+    shared_domains = query_domains & candidate_domains
+
+    if query_domains and candidate_domains:
+        matched = bool(shared_domains)
+        basis = "shared_core_topic" if matched else "conflicting_core_topics"
+    else:
+        matched = lexical + SCORE_EPSILON >= TOPIC_LEXICAL_FLOOR
+        basis = "lexical_fallback" if matched else "no_core_topic_overlap"
+
+    return matched, {
+        "basis": basis,
+        "query_domains": sorted(query_domains),
+        "candidate_domains": sorted(candidate_domains),
+        "shared_domains": sorted(shared_domains),
+        "lexical_overlap": round(lexical * 100, 1),
+    }
+
+
 def _clip(value: object, limit: int = 1600) -> str:
     text = normalize_text(value)
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
@@ -736,15 +803,41 @@ def _region_gate(
         "candidate_district": candidate_region["district"],
     }
     if query_region["scope"] == "nationwide":
-        return True, {**evidence, "reason": "nationwide_policy"}
+        return True, {
+            **evidence,
+            "reason": "nationwide_policy",
+            "context_score": 1.0,
+        }
+    if candidate_region["kind"] == "central":
+        return True, {
+            **evidence,
+            "reason": "central_reference",
+            "context_score": 0.85,
+        }
     if candidate_region["kind"] != "local":
-        return False, {**evidence, "reason": "candidate_region_unknown_or_central"}
+        return True, {
+            **evidence,
+            "reason": "candidate_region_unknown",
+            "context_score": 0.6,
+        }
     if candidate_region["province"] != query_region["province"]:
-        return False, {**evidence, "reason": "province_mismatch"}
+        return True, {
+            **evidence,
+            "reason": "different_region_reference",
+            "context_score": 0.85,
+        }
     district = query_region["district"]
     if district and candidate_region["district"] != district:
-        return False, {**evidence, "reason": "district_mismatch_or_unknown"}
-    return True, {**evidence, "reason": "same_applicable_region"}
+        return True, {
+            **evidence,
+            "reason": "different_district_reference",
+            "context_score": 0.9,
+        }
+    return True, {
+        **evidence,
+        "reason": "same_applicable_region",
+        "context_score": 1.0,
+    }
 
 
 def _age_gate(
@@ -755,15 +848,24 @@ def _age_gate(
     candidate_answer: str,
 ) -> tuple[bool, dict[str, Any]]:
     if not active:
-        return True, {"active": False, "reason": "policy_has_no_age_issue"}
+        return True, {
+            "active": False,
+            "reason": "policy_has_no_age_issue",
+            "context_score": 1.0,
+        }
     if expected is None:
-        return False, {"active": True, "reason": "policy_age_range_unknown"}
+        return False, {
+            "active": True,
+            "reason": "policy_age_range_unknown",
+            "context_score": 0.0,
+        }
     persona_age = _optional_age(persona.get("age"))
     if persona_age is None:
         return False, {
             "active": True,
             "policy_range": expected.as_dict(),
             "reason": "persona_age_unknown",
+            "context_score": 0.0,
         }
     relationship = _persona_age_relationship(persona_age, expected)
     candidate_ranges = extract_age_ranges(candidate_answer)
@@ -780,16 +882,33 @@ def _age_gate(
         "matched_candidate_range": compatible.as_dict() if compatible else None,
     }
     if relationship == "outside":
-        return False, {**evidence, "reason": "persona_outside_policy_or_boundary"}
+        return False, {
+            **evidence,
+            "reason": "persona_outside_policy_or_boundary",
+            "context_score": 0.0,
+        }
     if not candidate_ranges:
-        return False, {**evidence, "reason": "candidate_age_range_unknown"}
+        return True, {
+            **evidence,
+            "reason": "candidate_age_not_stated",
+            "context_score": 0.75,
+        }
     if compatible is None:
-        return False, {**evidence, "reason": "candidate_age_range_mismatch"}
-    return True, {**evidence, "reason": "same_age_rule_relationship"}
+        return False, {
+            **evidence,
+            "reason": "candidate_age_range_mismatch",
+            "context_score": 0.0,
+        }
+    return True, {
+        **evidence,
+        "reason": "same_age_rule_relationship",
+        "context_score": 1.0,
+    }
 
 
 def _empty_rejection_counts() -> dict[str, int]:
     return {
+        "topic": 0,
         "region": 0,
         "domain": 0,
         "issue": 0,
@@ -900,11 +1019,11 @@ def _hard_gate_evidence(
         "age": age_evidence,
     }
     context_parts = [
-        1.0 if region_ok else 0.0,
+        float(region_evidence.get("context_score", 0.0)),
         _set_overlap(set(query["domains"]), tags["domains"]),
         _set_overlap(set(query["issues"]), tags["issues"]),
         1.0 if not candidate_only_qualifications else 0.0,
-        1.0 if age_ok else 0.0,
+        float(age_evidence.get("context_score", 0.0)),
     ]
     return failures, evidence, sum(context_parts) / len(context_parts)
 
@@ -912,16 +1031,40 @@ def _hard_gate_evidence(
 def _match_reasons(evidence: Mapping[str, Any]) -> list[dict[str, Any]]:
     reasons: list[dict[str, Any]] = []
     region = evidence["region"]
-    if region["policy_scope"] == "nationwide":
-        region_details: Any = "전국 정책"
-    else:
-        region_details = {
-            "province": region["policy_province"],
-            "district": region["policy_district"],
-        }
-    reasons.append(
-        {"type": "region", "label": "정책 적용 지역 일치", "details": region_details}
-    )
+    region_reason = region.get("reason")
+    if region_reason == "nationwide_policy":
+        reasons.append(
+            {"type": "region", "label": "전국 정책 참고 사례", "details": "전국"}
+        )
+    elif region_reason == "same_applicable_region":
+        reasons.append(
+            {
+                "type": "region",
+                "label": "정책 적용 지역 일치",
+                "details": {
+                    "province": region["policy_province"],
+                    "district": region["policy_district"],
+                },
+            }
+        )
+    elif region_reason in {
+        "different_region_reference",
+        "different_district_reference",
+    }:
+        reasons.append(
+            {
+                "type": "region",
+                "label": "타 지역 유사 공개 사례",
+                "details": {
+                    "province": region["candidate_province"],
+                    "district": region["candidate_district"],
+                },
+            }
+        )
+    elif region_reason == "central_reference":
+        reasons.append(
+            {"type": "region", "label": "중앙기관 공개 사례", "details": "전국 참고"}
+        )
     reasons.append(
         {
             "type": "domain",
@@ -944,7 +1087,7 @@ def _match_reasons(evidence: Mapping[str, Any]) -> list[dict[str, Any]]:
                 "details": evidence["qualification_tags"],
             }
         )
-    if evidence["age"]["active"]:
+    if evidence["age"].get("reason") == "same_age_rule_relationship":
         reasons.append(
             {
                 "type": "age",
@@ -953,6 +1096,62 @@ def _match_reasons(evidence: Mapping[str, Any]) -> list[dict[str, Any]]:
                     "policy_range": evidence["age"].get("policy_range"),
                     "persona_relationship": evidence["age"].get("persona_relationship"),
                 },
+            }
+        )
+    return reasons
+
+
+def _reference_warnings(evidence: Mapping[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    region_reason = evidence["region"].get("reason")
+    if region_reason in {
+        "different_region_reference",
+        "different_district_reference",
+    }:
+        warnings.append(
+            "현재 정책과 다른 지역의 공개 사례이므로 실제 제출 절차와 담당 기관을 "
+            "별도로 확인해야 합니다."
+        )
+    elif region_reason == "candidate_region_unknown":
+        warnings.append(
+            "참고 사례의 적용 지역이 확인되지 않아 실제 절차를 그대로 적용할 수 없습니다."
+        )
+    if evidence["age"].get("reason") == "candidate_age_not_stated":
+        warnings.append(
+            "참고 사례에 동일한 연령 조건이 명시되지 않아 자격 판단 근거로 사용할 수 없습니다."
+        )
+    return warnings
+
+
+def _text_similarity_match_reasons(
+    score: float,
+    topic_evidence: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    reasons = [
+        {
+            "type": "semantic",
+            "label": "민원 문구·내용 유사",
+            "details": f"유사도 {score * 100:.1f}%",
+        }
+    ]
+    shared_domains = topic_evidence.get("shared_domains")
+    if isinstance(shared_domains, list) and shared_domains:
+        labels = [DOMAIN_LABELS.get(value, value) for value in shared_domains]
+        reasons.append(
+            {
+                "type": "topic",
+                "label": "핵심 주제 일치",
+                "details": "·".join(labels),
+            }
+        )
+    else:
+        reasons.append(
+            {
+                "type": "topic",
+                "label": "핵심 표현 일치",
+                "details": (
+                    f"문구 겹침 {float(topic_evidence.get('lexical_overlap', 0.0)):.1f}%"
+                ),
             }
         )
     return reasons
@@ -1235,77 +1434,11 @@ class CivilComplaintSimilarityService:
         if not isinstance(item, Mapping):
             return None, ["item_must_be_object"]
         complaint_text = normalize_text(item.get("complaint_text"))
-        policy = item.get("policy")
-        persona = item.get("persona")
-        errors = []
         if not complaint_text:
-            errors.append("complaint_text_required")
-        if not isinstance(policy, Mapping):
-            errors.append("policy_must_be_object")
-        if not isinstance(persona, Mapping):
-            errors.append("persona_must_be_object")
-        if errors:
-            return None, errors
-        assert isinstance(policy, Mapping)
-        assert isinstance(persona, Mapping)
-
-        policy_document = build_policy_context_document(policy)
-        if not policy_document:
-            errors.append("policy_context_required")
-        region, region_error = _policy_region(policy)
-        if region is None:
-            errors.append(region_error)
-
-        query_document = f"민원: {complaint_text}\n{policy_document}"
-        domains = domain_tags(query_document)
-        issues = issue_tags(query_document)
-        if not domains:
-            errors.append("query_domain_unknown")
-        if not issues:
-            errors.append("query_issue_unknown")
-
-        has_structured_age_contract = all(
-            key in policy for key in ("age_min", "age_max")
-        )
-        structured_age_unrestricted = has_structured_age_contract and all(
-            policy.get(key) is None for key in ("age_min", "age_max")
-        )
-        age_active = not structured_age_unrestricted and (
-            bool(POLICY_AGE_CONTEXT_PATTERN.search(query_document))
-            or any(policy.get(key) is not None for key in ("age_min", "age_max"))
-        )
-        age_range = _policy_age_range(policy, policy_document)
-        if age_active:
-            if age_range is None:
-                errors.append("policy_age_range_unknown")
-            elif _optional_age(persona.get("age")) is None:
-                errors.append("persona_age_unknown")
-            elif (
-                _persona_age_relationship(
-                    _optional_age(persona.get("age")) or 0, age_range
-                )
-                == "outside"
-            ):
-                errors.append("persona_outside_policy_or_boundary")
-
-        if errors:
-            return None, errors
-        assert region is not None
-        qualification_document = (
-            f"{complaint_text} {policy_document} {_persona_document(persona)}"
-        )
+            return None, ["complaint_text_required"]
         return {
             "complaint_text": complaint_text,
-            "policy_document": policy_document,
-            "combined_text": query_document,
-            "policy": policy,
-            "persona": persona,
-            "region": region,
-            "domains": domains,
-            "issues": issues,
-            "qualifications": qualification_tags(qualification_document),
-            "age_active": age_active,
-            "age_range": age_range,
+            "combined_text": complaint_text,
         }, []
 
     def search_batch(
@@ -1365,14 +1498,7 @@ class CivilComplaintSimilarityService:
                 prepared[position]["complaint_text"]  # type: ignore[index]
                 for position in valid_positions
             ]
-            policy_documents = [
-                prepared[position]["policy_document"]  # type: ignore[index]
-                for position in valid_positions
-            ]
-            embeddings = _embedding_matrix(
-                self.embedder,
-                complaint_documents + policy_documents,
-            )
+            embeddings = _embedding_matrix(self.embedder, complaint_documents)
             collection_count = int(collection.count())
             candidate_count = min(
                 max(top_k * CANDIDATE_MULTIPLIER, MIN_CANDIDATE_COUNT),
@@ -1398,13 +1524,11 @@ class CivilComplaintSimilarityService:
                     "민원 FAQ Chroma 배치 응답 형식이 올바르지 않습니다."
                 )
 
-            valid_count = len(valid_positions)
             for batch_index, position in enumerate(valid_positions):
                 query = prepared[position]
                 assert query is not None
                 complaint_scores = _distance_scores(raw, batch_index)
-                policy_scores = _distance_scores(raw, valid_count + batch_index)
-                candidate_ids = set(complaint_scores) | set(policy_scores)
+                candidate_ids = set(complaint_scores)
                 rejection_counts = _empty_rejection_counts()
                 ranked: list[tuple[float, float, str, dict[str, Any]]] = []
 
@@ -1415,43 +1539,36 @@ class CivilComplaintSimilarityService:
                             f"민원 FAQ Chroma ID가 canonical 정본에 없습니다: {case_id}"
                         )
 
-                    failures, evidence, context = _hard_gate_evidence(query, record)
-                    if failures:
-                        for failure in failures:
-                            rejection_counts[failure] += 1
-                        continue
-
                     complaint_dense = complaint_scores.get(case_id)
-                    policy_dense = policy_scores.get(case_id)
-                    if complaint_dense is None or policy_dense is None:
+                    if complaint_dense is None:
                         rejection_counts["missing_dense_score"] += 1
                         continue
-                    semantic = 0.55 * complaint_dense + 0.45 * policy_dense
                     candidate_heading = f"{record['title']} {record['question']}"
-                    lexical = lexical_score(query["combined_text"], candidate_heading)
-                    final = 0.70 * semantic + 0.20 * lexical + 0.10 * context
+                    lexical = lexical_score(query["complaint_text"], candidate_heading)
+                    if complaint_dense + SCORE_EPSILON < COMPLAINT_DENSE_FLOOR:
+                        rejection_counts["below_complaint_dense"] += 1
+                        continue
+                    topic_matches, topic_evidence = _topic_overlap_evidence(
+                        query["complaint_text"],
+                        candidate_heading,
+                        lexical=lexical,
+                    )
+                    if not topic_matches:
+                        rejection_counts["topic"] += 1
+                        continue
 
-                    threshold_failed = False
-                    for key, score, floor in (
-                        (
-                            "below_complaint_dense",
-                            complaint_dense,
-                            COMPLAINT_DENSE_FLOOR,
-                        ),
-                        ("below_policy_dense", policy_dense, POLICY_DENSE_FLOOR),
-                        ("below_semantic", semantic, SEMANTIC_FLOOR),
-                    ):
-                        if score + SCORE_EPSILON < floor:
-                            rejection_counts[key] += 1
-                            threshold_failed = True
-                    if threshold_failed:
-                        continue
-                    if final + SCORE_EPSILON < FINAL_SCORE_FLOOR:
-                        rejection_counts["below_final"] += 1
-                        continue
-                    if final + SCORE_EPSILON < UI_REFERENCE_SCORE_FLOOR:
-                        rejection_counts["below_ui_threshold"] += 1
-                        continue
+                    # Keep the component-score shape stable for existing clients,
+                    # while making every eligibility score equal to the one dense
+                    # complaint-text similarity. Lexical overlap is tie-break only.
+                    policy_dense = 0.0
+                    semantic = complaint_dense
+                    context = 0.0
+                    final = complaint_dense
+                    evidence = {
+                        "matching_basis": "complaint_text_similarity",
+                        "complaint_similarity": round(complaint_dense * 100, 1),
+                        "topic_overlap": topic_evidence,
+                    }
 
                     score_payload = _score_payload(
                         complaint_dense=complaint_dense,
@@ -1473,11 +1590,14 @@ class CivilComplaintSimilarityService:
                         "match_score": score_payload["final"],
                         "component_scores": score_payload,
                         "confidence": "medium" if final >= 0.78 else "low",
-                        "match_reasons": _match_reasons(evidence),
+                        "match_reasons": _text_similarity_match_reasons(
+                            complaint_dense,
+                            topic_evidence,
+                        ),
                         "evidence": evidence,
                         "warnings": list(COMMON_WARNINGS),
                     }
-                    ranked.append((final, semantic, case_id, result))
+                    ranked.append((complaint_dense, lexical, case_id, result))
 
                 ranked.sort(
                     key=lambda item: (item[0], item[1], item[2]),

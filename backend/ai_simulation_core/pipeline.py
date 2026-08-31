@@ -21,7 +21,10 @@ from backend.ai_simulation_core.simulations.civil_servant_simulation import (
 )
 
 def _complaint_query(complaint: dict) -> str:
-    for field in ("complaint_text", "dialogue"):
+    # The dialogue is the actual citizen-facing message shown prominently in the
+    # UI. The shorter complaint_text summary is only a fallback because generic
+    # summaries can over-match unrelated FAQ entries that also mention support.
+    for field in ("dialogue", "complaint_text"):
         value = complaint.get(field)
         if isinstance(value, str) and value.strip():
             return value.strip()

@@ -181,7 +181,7 @@ class PipelineResultTest(unittest.TestCase):
         self.complaint_search.assert_called_once_with(
             [
                 {
-                    "complaint_text": "지원 대상에서 제외됩니다.",
+                    "complaint_text": "첫 번째 대화",
                     "policy": policy,
                     "persona": first_persona,
                 },

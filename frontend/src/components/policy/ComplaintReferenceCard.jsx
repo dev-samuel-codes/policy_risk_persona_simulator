@@ -129,7 +129,7 @@ function ReferenceSearchMessage({ status }) {
         role="status"
         className="mt-3 rounded-[16px] border border-[#dde3ea] bg-[#f7f8fa] px-4 py-3 text-[12px] leading-5 text-slate"
       >
-        현재 지역·연령·정책 분야 기준으로 표시할 참고 사례를 찾지 못했습니다.
+        현재 민원 문구와 핵심 주제가 충분히 비슷한 공개 사례를 찾지 못했습니다.
       </p>
     );
   }

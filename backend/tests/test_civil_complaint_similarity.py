@@ -240,12 +240,13 @@ def _service(
 
 
 class CivilComplaintSimilarityTest(unittest.TestCase):
-    def test_screenshot_false_positive_fails_all_relevant_hard_gates(self) -> None:
+    def test_semantically_dissimilar_candidate_is_hidden_by_text_score(self) -> None:
         corpus = load_civil_complaint_corpus(FAQ_DATA_DIR)
         candidate = next(record for record in corpus if record["case_id"] == "6910486")
         collection = FakeCollection(
             count=len(corpus),
             ids=[candidate["case_id"]],
+            distances_by_row=[[0.61]],
         )
         service = similarity.CivilComplaintSimilarityService(
             index_dir=FAQ_DATA_DIR / "unused-index",
@@ -270,12 +271,61 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
 
         self.assertEqual(response["status"], "no_reliable_match")
         self.assertEqual(response["results"], [])
-        self.assertGreaterEqual(response["rejection_counts"]["region"], 1)
-        self.assertGreaterEqual(response["rejection_counts"]["domain"], 1)
-        self.assertGreaterEqual(response["rejection_counts"]["issue"], 1)
-        self.assertGreaterEqual(response["rejection_counts"]["qualification"], 1)
+        self.assertEqual(response["rejection_counts"]["below_complaint_dense"], 1)
+        self.assertEqual(response["rejection_counts"]["domain"], 0)
+        self.assertEqual(response["rejection_counts"]["issue"], 0)
+        self.assertEqual(response["rejection_counts"]["qualification"], 0)
 
-    def test_specific_region_rejects_unknown_candidate_organization(self) -> None:
+    def test_generic_support_language_cannot_bridge_unrelated_topics(self) -> None:
+        detail = _detail(
+            "6907787",
+            title="장애아동 현장학습 시 보조인력 지원 요청",
+            question=(
+                "장애아동이 현장학습에 참여할 수 있도록 "
+                "보조인력 지원을 요청합니다."
+            ),
+            answer="교육 활동 보조인력 배치 여부를 확인하겠습니다.",
+            organization="서울특별시교육청",
+        )
+        queries = [
+            {
+                "complaint_text": (
+                    "월 최대 20만 원의 월세 지원이 실제 생활비 부담을 "
+                    "덜어줄 수 있을지 궁금합니다."
+                )
+            },
+            {
+                "complaint_text": (
+                    "제공된 지원 규모가 현실적인 부담을 충분히 "
+                    "줄일 수 있는지 의문입니다."
+                )
+            },
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            _write_data(data_dir, [detail])
+            responses = _service(
+                data_dir,
+                collection=FakeCollection(
+                    count=1,
+                    ids=[detail["faqNo"]],
+                    distances_by_row=[[0.573], [0.573]],
+                ),
+            ).search_batch(queries)
+
+        self.assertEqual(
+            [response["status"] for response in responses],
+            ["no_reliable_match", "no_reliable_match"],
+        )
+        for response in responses:
+            self.assertEqual(response["results"], [])
+            self.assertEqual(response["rejection_counts"]["topic"], 1)
+            self.assertEqual(
+                response["rejection_counts"]["below_complaint_dense"],
+                0,
+            )
+
+    def test_unknown_candidate_region_does_not_affect_text_match(self) -> None:
         detail = _relevant_detail(organization="행복지원센터")
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory)
@@ -286,10 +336,46 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             )
             response = service.search_batch([_query_item()])[0]
 
-        self.assertEqual(response["status"], "no_reliable_match")
-        self.assertEqual(response["rejection_counts"]["region"], 1)
+        self.assertEqual(response["status"], "matched")
+        result = response["results"][0]
+        self.assertEqual(
+            result["evidence"]["matching_basis"],
+            "complaint_text_similarity",
+        )
+        self.assertIn(
+            "민원 문구·내용 유사",
+            {reason["label"] for reason in result["match_reasons"]},
+        )
+        self.assertIn(
+            "핵심 주제 일치",
+            {reason["label"] for reason in result["match_reasons"]},
+        )
+        self.assertEqual(
+            result["evidence"]["topic_overlap"]["shared_domains"],
+            ["housing"],
+        )
 
-    def test_nationwide_policy_allows_candidate_from_another_region(self) -> None:
+    def test_other_region_does_not_affect_text_match(self) -> None:
+        detail = _relevant_detail(organization="부산광역시 남구")
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            _write_data(data_dir, [detail])
+            response = _service(
+                data_dir,
+                collection=FakeCollection(count=1, ids=[detail["faqNo"]]),
+            ).search_batch([_query_item()])[0]
+
+        self.assertEqual(response["status"], "matched")
+        result = response["results"][0]
+        self.assertIn(
+            "민원 문구·내용 유사",
+            {reason["label"] for reason in result["match_reasons"]},
+        )
+        self.assertTrue(
+            any("지역·연령·분야·자격 조건과 관계없이" in warning for warning in result["warnings"])
+        )
+
+    def test_policy_scope_does_not_change_text_match(self) -> None:
         detail = _relevant_detail(organization="대전광역시")
         policy = {
             **_specific_policy(),
@@ -310,11 +396,11 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
         self.assertEqual(response["status"], "matched")
         self.assertTrue(response["results"][0]["reference_eligible"])
         self.assertEqual(
-            response["results"][0]["evidence"]["region"]["reason"],
-            "nationwide_policy",
+            response["results"][0]["evidence"]["matching_basis"],
+            "complaint_text_similarity",
         )
 
-    def test_explicit_unrestricted_age_contract_is_not_an_invalid_query(self) -> None:
+    def test_policy_and_persona_fields_are_ignored_during_query_preparation(self) -> None:
         detail = _relevant_detail(organization="대전광역시")
         policy = {
             **_specific_policy(),
@@ -339,8 +425,13 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertIsNotNone(query)
-        self.assertFalse(query["age_active"])
-        self.assertIsNone(query["age_range"])
+        self.assertEqual(
+            query,
+            {
+                "complaint_text": _query_item()["complaint_text"],
+                "combined_text": _query_item()["complaint_text"],
+            },
+        )
 
     def test_english_policy_terms_identify_supported_domains(self) -> None:
         cases = {
@@ -362,7 +453,63 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIn(expected, similarity.domain_tags(text))
 
-    def test_age_35_boundary_matches_same_19_to_34_rule(self) -> None:
+    def test_generated_complaint_recognizes_document_and_submission_language(
+        self,
+    ) -> None:
+        tags = similarity.issue_tags(
+            "임대차 계약서와 거주 증명서를 어디서 발급받고 어떻게 제출해야 하나요?"
+        )
+
+        self.assertIn("documents", tags)
+        self.assertIn("application_method", tags)
+
+    def test_candidate_without_age_text_matches_by_text_only(self) -> None:
+        detail = _detail(
+            "housing-no-age",
+            title="청년 월세 지원 대상 자격",
+            question="청년 월세 지원을 받을 수 있나요?",
+            answer="신청 자격과 제출 서류는 공고문을 확인해 주세요.",
+            organization="경기도 평택시",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            _write_data(data_dir, [detail])
+            response = _service(
+                data_dir,
+                collection=FakeCollection(count=1, ids=[detail["faqNo"]]),
+            ).search_batch([_query_item()])[0]
+
+        self.assertEqual(response["status"], "matched")
+        result = response["results"][0]
+        self.assertEqual(
+            result["evidence"]["matching_basis"],
+            "complaint_text_similarity",
+        )
+
+    def test_incompatible_candidate_age_does_not_block_text_match(self) -> None:
+        detail = _detail(
+            "housing-wrong-age",
+            title="청년 월세 지원 대상 자격",
+            question="청년 월세 지원을 받을 수 있나요?",
+            answer="만 40세 이상 50세 이하인 사람만 지원 대상입니다.",
+            organization="경기도 평택시",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            _write_data(data_dir, [detail])
+            response = _service(
+                data_dir,
+                collection=FakeCollection(count=1, ids=[detail["faqNo"]]),
+            ).search_batch([_query_item()])[0]
+
+        self.assertEqual(response["status"], "matched")
+        self.assertEqual(response["rejection_counts"]["age"], 0)
+        self.assertEqual(
+            response["results"][0]["evidence"]["matching_basis"],
+            "complaint_text_similarity",
+        )
+
+    def test_persona_age_does_not_change_text_match(self) -> None:
         detail = _relevant_detail()
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory)
@@ -374,11 +521,9 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             response = service.search_batch([_query_item(age=35)])[0]
 
         self.assertEqual(response["status"], "matched")
-        evidence = response["results"][0]["evidence"]["age"]
-        self.assertEqual(evidence["persona_relationship"], "upper_boundary")
         self.assertEqual(
-            evidence["matched_candidate_range"],
-            {"minimum": 19, "maximum": 34},
+            response["results"][0]["evidence"]["matching_basis"],
+            "complaint_text_similarity",
         )
 
     def test_batch_uses_one_encode_and_one_chroma_query(self) -> None:
@@ -397,9 +542,9 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
 
         self.assertEqual([item["status"] for item in responses], ["matched", "matched"])
         self.assertEqual(len(embedder.calls), 1)
-        self.assertEqual(len(embedder.calls[0]), 4)
+        self.assertEqual(len(embedder.calls[0]), 2)
         self.assertEqual(len(collection.query_calls), 1)
-        self.assertEqual(len(collection.query_calls[0]["query_embeddings"]), 4)
+        self.assertEqual(len(collection.query_calls[0]["query_embeddings"]), 2)
 
     def test_manifest_hash_change_fails_closed_before_query(self) -> None:
         detail = _relevant_detail()
@@ -437,10 +582,8 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             with self.assertRaises(similarity.CivilComplaintIndexUnavailableError):
                 service.search_batch([_query_item()])
 
-    def test_ui_threshold_is_inclusive_and_next_lower_score_is_hidden(self) -> None:
-        detail = _relevant_detail()
-        # Dense=.70 => semantic=.70 and all hard-gate context=.1 contribution.
-        # lexical=.45 therefore makes final exactly .68.
+    def test_text_similarity_threshold_is_inclusive(self) -> None:
+        detail = _relevant_detail(organization="부산광역시 남구")
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory)
             _write_data(data_dir, [detail])
@@ -449,45 +592,37 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
                 collection=FakeCollection(
                     count=1,
                     ids=[detail["faqNo"]],
-                    distances_by_row=[[0.30], [0.30]],
+                    distances_by_row=[[0.60]],
                 ),
             )
-            with patch.object(similarity, "lexical_score", return_value=0.45):
-                accepted = service.search_batch([_query_item()])[0]
+            accepted = service.search_batch([_query_item()])[0]
 
             lower_service = _service(
                 data_dir,
                 collection=FakeCollection(
                     count=1,
                     ids=[detail["faqNo"]],
-                    distances_by_row=[[0.30], [0.30]],
+                    distances_by_row=[[0.6002]],
                 ),
             )
-            with patch.object(similarity, "lexical_score", return_value=0.4499):
-                hidden = lower_service.search_batch([_query_item()])[0]
+            hidden = lower_service.search_batch([_query_item()])[0]
 
         self.assertEqual(accepted["status"], "matched")
-        self.assertEqual(accepted["results"][0]["match_score"], 68.0)
+        self.assertEqual(accepted["results"][0]["match_score"], 40.0)
         self.assertEqual(hidden["status"], "no_reliable_match")
-        self.assertEqual(hidden["rejection_counts"]["below_ui_threshold"], 1)
+        self.assertEqual(hidden["rejection_counts"]["below_complaint_dense"], 1)
 
-    def test_dense_and_semantic_floors_are_inclusive(self) -> None:
+    def test_dense_score_controls_eligibility_after_topic_match(self) -> None:
         detail = _relevant_detail()
         cases = (
-            # complaint=.50, policy=.90 -> semantic=.68
-            ([[0.50], [0.10]], "matched", None),
-            ([[0.5002], [0.10]], "no_reliable_match", "below_complaint_dense"),
-            # complaint=.90, policy=.50 -> semantic=.72
-            ([[0.10], [0.50]], "matched", None),
-            ([[0.10], [0.5002]], "no_reliable_match", "below_policy_dense"),
-            # Both=.55 -> semantic=.55 exactly.
-            ([[0.45], [0.45]], "matched", None),
-            ([[0.4502], [0.4502]], "no_reliable_match", "below_semantic"),
+            ([[0.60]], "matched"),
+            ([[0.10]], "matched"),
+            ([[0.6002]], "no_reliable_match"),
         )
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory)
             _write_data(data_dir, [detail])
-            for distances, expected_status, rejection_key in cases:
+            for distances, expected_status in cases:
                 with self.subTest(
                     distances=distances,
                     expected_status=expected_status,
@@ -503,51 +638,47 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
                     with patch.object(similarity, "lexical_score", return_value=1.0):
                         response = service.search_batch([_query_item()])[0]
                     self.assertEqual(response["status"], expected_status)
-                    if rejection_key:
-                        self.assertEqual(
-                            response["rejection_counts"][rejection_key],
-                            1,
-                        )
+                    self.assertEqual(response["rejection_counts"]["below_policy_dense"], 0)
+                    self.assertEqual(response["rejection_counts"]["below_semantic"], 0)
+                    self.assertEqual(response["rejection_counts"]["below_final"], 0)
+                    self.assertEqual(response["rejection_counts"]["below_ui_threshold"], 0)
 
-    def test_initial_final_floor_is_inclusive_before_ui_gate(self) -> None:
+    def test_missing_or_invalid_policy_and_persona_do_not_block_match(self) -> None:
         detail = _relevant_detail()
         with tempfile.TemporaryDirectory() as directory:
             data_dir = Path(directory)
             _write_data(data_dir, [detail])
-            exact_service = _service(
+            service = _service(
                 data_dir,
-                collection=FakeCollection(
-                    count=1,
-                    ids=[detail["faqNo"]],
-                    distances_by_row=[[0.40], [0.40]],
-                ),
+                collection=FakeCollection(count=1, ids=[detail["faqNo"]]),
             )
-            # semantic=.60, context=1, lexical=.50 -> final=.62 exactly.
-            with patch.object(similarity, "lexical_score", return_value=0.50):
-                exact = exact_service.search_batch([_query_item()])[0]
-
-            lower_service = _service(
-                data_dir,
-                collection=FakeCollection(
-                    count=1,
-                    ids=[detail["faqNo"]],
-                    distances_by_row=[[0.40], [0.40]],
-                ),
+            complaint = _query_item()["complaint_text"]
+            responses = service.search_batch(
+                [
+                    {"complaint_text": complaint},
+                    {
+                        "complaint_text": complaint,
+                        "policy": "invalid but ignored",
+                        "persona": None,
+                    },
+                ]
             )
-            with patch.object(similarity, "lexical_score", return_value=0.499):
-                lower = lower_service.search_batch([_query_item()])[0]
 
-        self.assertEqual(exact["status"], "no_reliable_match")
-        self.assertEqual(exact["rejection_counts"]["below_final"], 0)
-        self.assertEqual(exact["rejection_counts"]["below_ui_threshold"], 1)
-        self.assertEqual(lower["rejection_counts"]["below_final"], 1)
+        self.assertEqual([item["status"] for item in responses], ["matched", "matched"])
 
     def test_shared_threshold_constants_and_response_contract(self) -> None:
-        self.assertEqual(similarity.COMPLAINT_DENSE_FLOOR, 0.50)
-        self.assertEqual(similarity.POLICY_DENSE_FLOOR, 0.50)
-        self.assertEqual(similarity.SEMANTIC_FLOOR, 0.55)
-        self.assertEqual(similarity.FINAL_SCORE_FLOOR, 0.62)
-        self.assertEqual(similarity.UI_REFERENCE_SCORE_FLOOR, 0.68)
+        self.assertEqual(similarity.COMPLAINT_DENSE_FLOOR, 0.40)
+        self.assertEqual(similarity.POLICY_DENSE_FLOOR, 0.0)
+        self.assertEqual(similarity.SEMANTIC_FLOOR, 0.40)
+        self.assertEqual(similarity.FINAL_SCORE_FLOOR, 0.40)
+        self.assertEqual(similarity.UI_REFERENCE_SCORE_FLOOR, 0.40)
+        self.assertEqual(similarity.COMPLAINT_SEMANTIC_WEIGHT, 1.0)
+        self.assertEqual(similarity.POLICY_SEMANTIC_WEIGHT, 0.0)
+        self.assertEqual(similarity.FINAL_SEMANTIC_WEIGHT, 1.0)
+        self.assertEqual(similarity.FINAL_LEXICAL_WEIGHT, 0.0)
+        self.assertEqual(similarity.FINAL_CONTEXT_WEIGHT, 0.0)
+        self.assertEqual(similarity.TOPIC_LEXICAL_FLOOR, 0.08)
+        self.assertEqual(similarity.MIN_CANDIDATE_COUNT, 300)
 
         detail = _relevant_detail()
         with tempfile.TemporaryDirectory() as directory:
@@ -567,6 +698,12 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
         self.assertIn(result["confidence"], {"low", "medium"})
         self.assertNotEqual(result["confidence"], "high")
         self.assertEqual(result["match_score"], result["component_scores"]["final"])
+        self.assertEqual(
+            result["component_scores"]["complaint_dense"],
+            result["component_scores"]["semantic"],
+        )
+        self.assertEqual(result["component_scores"]["policy_dense"], 0.0)
+        self.assertEqual(result["component_scores"]["context"], 0.0)
         self.assertTrue(all("type" in reason for reason in result["match_reasons"]))
 
     def test_invalid_query_and_empty_batch_do_not_embed(self) -> None:
