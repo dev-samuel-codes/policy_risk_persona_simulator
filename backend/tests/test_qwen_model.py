@@ -55,8 +55,8 @@ class QwenModelTest(unittest.TestCase):
             cpu_count=16,
             system_memory_total=32 * GIB,
             system_memory_available=28 * GIB,
-            cuda_memory_total=12 * GIB,
-            cuda_memory_available=11 * GIB,
+            cuda_memory_total=24 * GIB,
+            cuda_memory_available=17 * GIB,
         )
 
     @patch(
@@ -75,28 +75,46 @@ class QwenModelTest(unittest.TestCase):
             total=32 * GIB,
             available=28 * GIB,
         )
-        mem_get_info.return_value = (11 * GIB, 12 * GIB)
+        mem_get_info.return_value = (17 * GIB, 24 * GIB)
 
         resources = get_system_resources(torch.device("cuda"))
 
         self.assertEqual(resources, self.cuda_resources)
         mem_get_info.assert_called_once_with(0)
 
-    def test_selects_8b_when_cuda_and_system_memory_are_sufficient(self) -> None:
+    def test_selects_8b_when_cuda_vram_is_sufficient(self) -> None:
         self.assertEqual(
             select_qwen_model(self.cuda_resources),
             QWEN_8B_MODEL_NAME,
         )
 
+    def test_selects_8b_even_when_system_resources_are_small(self) -> None:
+        resources = replace(
+            self.cuda_resources,
+            cpu_count=1,
+            system_memory_total=4 * GIB,
+            system_memory_available=2 * GIB,
+        )
+
+        self.assertEqual(select_qwen_model(resources), QWEN_8B_MODEL_NAME)
+
     def test_selects_4b_when_cuda_memory_is_insufficient(self) -> None:
         resources = replace(
             self.cuda_resources,
-            cuda_memory_available=8 * GIB,
+            cuda_memory_available=(16 * GIB) - 1,
         )
 
         self.assertEqual(select_qwen_model(resources), QWEN_4B_MODEL_NAME)
 
-    def test_selects_8b_for_large_mps_unified_memory(self) -> None:
+    def test_selects_8b_at_exactly_16_gib_cuda_vram(self) -> None:
+        resources = replace(
+            self.cuda_resources,
+            cuda_memory_available=16 * GIB,
+        )
+
+        self.assertEqual(select_qwen_model(resources), QWEN_8B_MODEL_NAME)
+
+    def test_selects_4b_for_mps_without_cuda_vram(self) -> None:
         resources = SystemResources(
             device_type="mps",
             cpu_count=10,
@@ -104,9 +122,9 @@ class QwenModelTest(unittest.TestCase):
             system_memory_available=32 * GIB,
         )
 
-        self.assertEqual(select_qwen_model(resources), QWEN_8B_MODEL_NAME)
+        self.assertEqual(select_qwen_model(resources), QWEN_4B_MODEL_NAME)
 
-    def test_selects_8b_for_large_cpu_resources(self) -> None:
+    def test_selects_4b_for_cpu_without_cuda_vram(self) -> None:
         resources = SystemResources(
             device_type="cpu",
             cpu_count=12,
@@ -114,7 +132,7 @@ class QwenModelTest(unittest.TestCase):
             system_memory_available=32 * GIB,
         )
 
-        self.assertEqual(select_qwen_model(resources), QWEN_8B_MODEL_NAME)
+        self.assertEqual(select_qwen_model(resources), QWEN_4B_MODEL_NAME)
 
     def test_cuda_memory_limits_keep_headroom_on_smaller_computer(self) -> None:
         resources = replace(

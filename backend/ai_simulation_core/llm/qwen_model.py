@@ -29,13 +29,10 @@ QWEN_4B_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 QWEN_8B_MODEL_NAME = "Qwen/Qwen3-8B"
 QWEN_MODEL_NAME_ENV = "QWEN_MODEL_NAME"
 
-# 8B 모델은 BF16 가중치와 생성 버퍼를 함께 올릴 여유가 있어야 한다.
-# 순간 사용률이 아닌 현재 사용 가능한 용량을 기준으로 다른 프로세스와의
-# 메모리 경합까지 반영한다.
-QWEN_8B_MIN_CUDA_MEMORY = 10 * GIB
-QWEN_8B_MIN_CUDA_SYSTEM_MEMORY = 16 * GIB
-QWEN_8B_MIN_SYSTEM_MEMORY = 24 * GIB
-QWEN_8B_MIN_CPU_COUNT = 8
+# 자동 전환은 모델을 올리기 직전의 가용 CUDA VRAM만 사용한다.
+# RAM과 CPU 정보는 로그 및 오프로딩 상한 계산에만 사용하고 모델 크기
+# 결정에는 반영하지 않는다.
+QWEN_8B_MIN_AVAILABLE_VRAM = 16 * GIB
 
 CUDA_MEMORY_RESERVE = 1 * GIB
 CPU_MEMORY_RESERVE = 2 * GIB
@@ -47,7 +44,7 @@ CPU_MAX_MEMORY = f"{CPU_MAX_MEMORY_GIB}GiB"
 
 @dataclass(frozen=True)
 class SystemResources:
-    """모델을 올리기 직전에 확인한 컴퓨터의 가용 자원."""
+    """모델 로딩 직전에 확인한 자원과 오프로딩 계산용 메모리 정보."""
 
     device_type: str
     cpu_count: int
@@ -85,32 +82,16 @@ def select_qwen_model(
     *,
     model_name_override: str | None = None,
 ) -> str:
-    """가용 메모리와 가속기 종류에 맞는 Qwen 모델을 선택한다."""
+    """가용 CUDA VRAM만으로 Qwen 4B 또는 8B를 선택한다."""
     normalized_override = (model_name_override or "").strip()
     if normalized_override:
         # 재현이 필요한 실행에서는 자동 판단보다 명시적 환경변수를 우선한다.
         return normalized_override
 
-    if resources.device_type == "cuda":
-        has_cuda_memory = (
-            resources.cuda_memory_available is not None
-            and resources.cuda_memory_available >= QWEN_8B_MIN_CUDA_MEMORY
-        )
-        has_offload_memory = (
-            resources.system_memory_available
-            >= QWEN_8B_MIN_CUDA_SYSTEM_MEMORY
-        )
-        if has_cuda_memory and has_offload_memory:
-            return QWEN_8B_MODEL_NAME
-
-    elif resources.device_type == "mps":
-        # Apple Silicon은 GPU와 시스템이 통합 메모리를 공유한다.
-        if resources.system_memory_available >= QWEN_8B_MIN_SYSTEM_MEMORY:
-            return QWEN_8B_MODEL_NAME
-
-    elif (
-        resources.system_memory_available >= QWEN_8B_MIN_SYSTEM_MEMORY
-        and resources.cpu_count >= QWEN_8B_MIN_CPU_COUNT
+    if (
+        resources.device_type == "cuda"
+        and resources.cuda_memory_available is not None
+        and resources.cuda_memory_available >= QWEN_8B_MIN_AVAILABLE_VRAM
     ):
         return QWEN_8B_MODEL_NAME
 
@@ -178,7 +159,7 @@ class LLM:
             "가용 VRAM="
             f"{_format_gib(self.resources.cuda_memory_available)}"
         )
-        print(f"[LLM] 자원 기준 모델 선택: {self.model_name}")
+        print(f"[LLM] 가용 VRAM 기준 모델 선택: {self.model_name}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
