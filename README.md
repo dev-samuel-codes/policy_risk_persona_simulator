@@ -7,7 +7,7 @@
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.116%2B-009688?logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111827)
-![Local LLM](https://img.shields.io/badge/Local_LLM-Qwen3--8B-6f42c1)
+![Local LLM](https://img.shields.io/badge/Local_LLM-Qwen3--4B%20%2F%208B-6f42c1)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 **정책 입력 또는 문서 업로드 → 지역·연령 조건 설정 → 시민 페르소나 3명 선택 → 예상 민원·공무원 답변·유사 사례 확인**
@@ -51,7 +51,7 @@ flowchart LR
     A["정책 직접 입력 또는 파일 업로드"] --> B["정책 9개 필드 추출·검토"]
     B --> C["지역·연령 조건 설정"]
     C --> D["시민 페르소나 3명 선택"]
-    D --> E["Qwen3-8B 시민 민원 생성"]
+    D --> E["자원에 맞는 Qwen3-4B/8B 시민 민원 생성"]
     E --> F["결과 품질 검증"]
     F --> G["정책 근거형 공무원 답변 구성"]
     B --> H["정부24 유사 정책 검색"]
@@ -66,7 +66,7 @@ flowchart LR
 3. 추출된 값을 검토하고 지역·연령 조건을 설정합니다.
 4. 조건에 맞는 시민 또는 연령 경계 시민 중 3명을 선택합니다.
 5. 서버가 정책, 선택 조건과 페르소나 ID를 다시 확인한 뒤 작업을 생성합니다.
-6. Qwen3-8B가 시민별 민원을 생성하고 서버가 정책·페르소나 근거를 확인합니다.
+6. 시스템 자원에 따라 선택된 Qwen3-4B 또는 8B가 시민별 민원을 생성하고 서버가 정책·페르소나 근거를 확인합니다.
 7. 같은 민원 쟁점을 기준으로 공무원 답변과 검색 참고자료를 연결합니다.
 8. 시민 3명과 연결된 결과가 모두 검증되면 결과 화면에 표시합니다.
 
@@ -74,16 +74,16 @@ flowchart LR
 
 | 역할 | 모델·데이터 | 사용 방식 |
 |---|---|---|
-| 정책 필드 추출·시민 민원 생성 | `Qwen/Qwen3-8B` | 기본 로컬 생성 모델 |
+| 정책 필드 추출·시민 민원 생성 | `Qwen/Qwen3-4B-Instruct-2507`, `Qwen/Qwen3-8B` | 실행 시 가용 자원에 맞춰 자동 선택 |
 | 정책·민원 임베딩 | `snunlp/KR-SBERT-V40K-klueNLI-augSTS` | ChromaDB 의미 유사도 검색 |
 | 시민 페르소나 | `nvidia/Nemotron-Personas-Korea` | 지역·연령·직업 등 합성 시민 정보 |
 | 유사 정책 | 정부24 공공서비스 정보 | 입력 정책과 유사한 정부 정책 검색 |
 | 공개 Q&A | 공개 민원 FAQ | 생성 민원과 관련된 참고 사례 검색 |
 
-기본 생성 모델은 `Qwen/Qwen3-8B`입니다.
+실행 직전에 운영체제의 CPU·메모리 정보와 CUDA의 가용 VRAM을 확인해 생성 모델을 선택합니다.
 
 > [!TIP]
-> GPU 메모리나 시스템 메모리가 부족하면 `backend/ai_simulation_core/llm/qwen_model.py`의 `QWEN_MODEL_NAME`을 `Qwen/Qwen3-4B-Instruct-2507`로 변경해 실행하세요.
+> CUDA는 가용 VRAM 10GiB와 가용 RAM 16GiB 이상, Apple MPS는 가용 통합 메모리 24GiB 이상, CPU는 가용 RAM 24GiB와 논리 코어 8개 이상일 때 8B를 선택합니다. 그보다 적으면 4B를 선택합니다. 자동 선택을 재정의하려면 `QWEN_MODEL_NAME` 환경변수에 원하는 Hugging Face 모델 ID를 지정하세요.
 
 ## 실행 환경
 
@@ -150,7 +150,7 @@ Vite 개발 서버는 `/api` 요청을 `http://127.0.0.1:8000`으로 전달합�
 ### 최초 실행 시 준비되는 파일
 
 - 첫 페르소나 조회에서 Nemotron 페르소나 데이터를 `data/raw/personas/`에 내려받습니다.
-- 첫 정책 필드 추출 또는 시뮬레이션에서 `Qwen/Qwen3-8B`를 Hugging Face 캐시에 내려받습니다.
+- 첫 정책 필드 추출 또는 시뮬레이션에서 자동 선택된 Qwen 4B 또는 8B를 Hugging Face 캐시에 내려받습니다.
 - 첫 유사도 검색에서 KR-SBERT 모델을 내려받습니다.
 - 정책·민원 Chroma 인덱스와 manifest는 저장소에 포함되어 있습니다.
 

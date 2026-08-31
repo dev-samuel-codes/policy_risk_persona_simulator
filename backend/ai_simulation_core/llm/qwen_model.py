@@ -15,15 +15,139 @@
 """
 
 import gc
+import os
+from dataclasses import dataclass
 from typing import Any
 
+import psutil
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-QWEN_MODEL_NAME = "Qwen/Qwen3-8B"
-CUDA_MAX_MEMORY = "9GiB"
-CPU_MAX_MEMORY = "22GiB"
+GIB = 1024**3
+QWEN_4B_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
+QWEN_8B_MODEL_NAME = "Qwen/Qwen3-8B"
+QWEN_MODEL_NAME_ENV = "QWEN_MODEL_NAME"
+
+# 8B 모델은 BF16 가중치와 생성 버퍼를 함께 올릴 여유가 있어야 한다.
+# 순간 사용률이 아닌 현재 사용 가능한 용량을 기준으로 다른 프로세스와의
+# 메모리 경합까지 반영한다.
+QWEN_8B_MIN_CUDA_MEMORY = 10 * GIB
+QWEN_8B_MIN_CUDA_SYSTEM_MEMORY = 16 * GIB
+QWEN_8B_MIN_SYSTEM_MEMORY = 24 * GIB
+QWEN_8B_MIN_CPU_COUNT = 8
+
+CUDA_MEMORY_RESERVE = 1 * GIB
+CPU_MEMORY_RESERVE = 2 * GIB
+CUDA_MAX_MEMORY_GIB = 9
+CPU_MAX_MEMORY_GIB = 22
+CUDA_MAX_MEMORY = f"{CUDA_MAX_MEMORY_GIB}GiB"
+CPU_MAX_MEMORY = f"{CPU_MAX_MEMORY_GIB}GiB"
+
+
+@dataclass(frozen=True)
+class SystemResources:
+    """모델을 올리기 직전에 확인한 컴퓨터의 가용 자원."""
+
+    device_type: str
+    cpu_count: int
+    system_memory_total: int
+    system_memory_available: int
+    cuda_memory_total: int | None = None
+    cuda_memory_available: int | None = None
+
+
+def get_system_resources(device: torch.device) -> SystemResources:
+    """운영체제와 CUDA API에서 현재 사용 가능한 자원을 읽는다."""
+    system_memory = psutil.virtual_memory()
+    cuda_memory_available: int | None = None
+    cuda_memory_total: int | None = None
+
+    if device.type == "cuda":
+        # CUDA가 실제로 사용할 수 있는 현재 여유 VRAM을 읽어 다른 작업이
+        # 점유 중인 메모리까지 모델 선택에 반영한다.
+        cuda_memory_available, cuda_memory_total = torch.cuda.mem_get_info(
+            device.index or 0
+        )
+
+    return SystemResources(
+        device_type=device.type,
+        cpu_count=psutil.cpu_count(logical=True) or 1,
+        system_memory_total=system_memory.total,
+        system_memory_available=system_memory.available,
+        cuda_memory_total=cuda_memory_total,
+        cuda_memory_available=cuda_memory_available,
+    )
+
+
+def select_qwen_model(
+    resources: SystemResources,
+    *,
+    model_name_override: str | None = None,
+) -> str:
+    """가용 메모리와 가속기 종류에 맞는 Qwen 모델을 선택한다."""
+    normalized_override = (model_name_override or "").strip()
+    if normalized_override:
+        # 재현이 필요한 실행에서는 자동 판단보다 명시적 환경변수를 우선한다.
+        return normalized_override
+
+    if resources.device_type == "cuda":
+        has_cuda_memory = (
+            resources.cuda_memory_available is not None
+            and resources.cuda_memory_available >= QWEN_8B_MIN_CUDA_MEMORY
+        )
+        has_offload_memory = (
+            resources.system_memory_available
+            >= QWEN_8B_MIN_CUDA_SYSTEM_MEMORY
+        )
+        if has_cuda_memory and has_offload_memory:
+            return QWEN_8B_MODEL_NAME
+
+    elif resources.device_type == "mps":
+        # Apple Silicon은 GPU와 시스템이 통합 메모리를 공유한다.
+        if resources.system_memory_available >= QWEN_8B_MIN_SYSTEM_MEMORY:
+            return QWEN_8B_MODEL_NAME
+
+    elif (
+        resources.system_memory_available >= QWEN_8B_MIN_SYSTEM_MEMORY
+        and resources.cpu_count >= QWEN_8B_MIN_CPU_COUNT
+    ):
+        return QWEN_8B_MODEL_NAME
+
+    return QWEN_4B_MODEL_NAME
+
+
+def _format_gib(byte_count: int | None) -> str:
+    if byte_count is None:
+        return "없음"
+    return f"{byte_count / GIB:.1f}GiB"
+
+
+def _memory_limit(
+    available_memory: int,
+    *,
+    reserve_memory: int,
+    maximum_gib: int,
+) -> str:
+    usable_memory = max(GIB, available_memory - reserve_memory)
+    return f"{min(maximum_gib, usable_memory // GIB)}GiB"
+
+
+def get_cuda_max_memory(resources: SystemResources) -> dict[int | str, str]:
+    """현재 여유 메모리를 넘지 않는 CUDA/CPU 배치 상한을 만든다."""
+    cuda_memory_available = resources.cuda_memory_available or GIB
+    return {
+        0: _memory_limit(
+            cuda_memory_available,
+            reserve_memory=CUDA_MEMORY_RESERVE,
+            maximum_gib=CUDA_MAX_MEMORY_GIB,
+        ),
+        "cpu": _memory_limit(
+            resources.system_memory_available,
+            reserve_memory=CPU_MEMORY_RESERVE,
+            maximum_gib=CPU_MAX_MEMORY_GIB,
+        ),
+    }
 
 
 class LLM:
@@ -38,20 +162,37 @@ class LLM:
         return torch.device("cpu")
 
     def __init__(self) -> None:
-        self.model_name = QWEN_MODEL_NAME
         self.device = self.get_device()
+        self.resources = get_system_resources(self.device)
+        self.model_name = select_qwen_model(
+            self.resources,
+            model_name_override=os.getenv(QWEN_MODEL_NAME_ENV),
+        )
+
+        print(
+            "[LLM] 시스템 자원 확인: "
+            f"장치={self.resources.device_type}, "
+            f"CPU={self.resources.cpu_count}코어, "
+            "가용 RAM="
+            f"{_format_gib(self.resources.system_memory_available)}, "
+            "가용 VRAM="
+            f"{_format_gib(self.resources.cuda_memory_available)}"
+        )
+        print(f"[LLM] 자원 기준 모델 선택: {self.model_name}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
         # CUDA 경로에서는 BF16과 메모리 상한을 사용해 선택된 Qwen 모델의
         # 레이어와 버퍼를 GPU와 CPU에 자동 배치한다.
-        model_kwargs: dict[str, Any] = {"torch_dtype": "auto"}
+        model_kwargs: dict[str, Any] = {"dtype": "auto"}
         if self.device.type == "cuda":
             model_kwargs.update(
                 {
-                    "torch_dtype": torch.bfloat16,
+                    "dtype": torch.bfloat16,
                     "device_map": "auto",
-                    "max_memory": {0: CUDA_MAX_MEMORY, "cpu": CPU_MAX_MEMORY},
+                    # 감지된 가용량보다 작은 상한만 Accelerate에 전달해
+                    # 모델 선택 이후의 레이어 배치에서도 OOM 여지를 줄인다.
+                    "max_memory": get_cuda_max_memory(self.resources),
                     "offload_buffers": True,
                 }
             )
