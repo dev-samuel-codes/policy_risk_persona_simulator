@@ -55,8 +55,8 @@ class QwenModelTest(unittest.TestCase):
             cpu_count=16,
             system_memory_total=32 * GIB,
             system_memory_available=28 * GIB,
-            cuda_memory_total=24 * GIB,
-            cuda_memory_available=17 * GIB,
+            cuda_memory_total=32 * GIB,
+            cuda_memory_available=25 * GIB,
         )
 
     @patch(
@@ -75,7 +75,7 @@ class QwenModelTest(unittest.TestCase):
             total=32 * GIB,
             available=28 * GIB,
         )
-        mem_get_info.return_value = (17 * GIB, 24 * GIB)
+        mem_get_info.return_value = (25 * GIB, 32 * GIB)
 
         resources = get_system_resources(torch.device("cuda"))
 
@@ -101,15 +101,15 @@ class QwenModelTest(unittest.TestCase):
     def test_selects_4b_when_cuda_memory_is_insufficient(self) -> None:
         resources = replace(
             self.cuda_resources,
-            cuda_memory_available=(16 * GIB) - 1,
+            cuda_memory_available=(24 * GIB) - 1,
         )
 
         self.assertEqual(select_qwen_model(resources), QWEN_4B_MODEL_NAME)
 
-    def test_selects_8b_at_exactly_16_gib_cuda_vram(self) -> None:
+    def test_selects_8b_at_exactly_24_gib_cuda_vram(self) -> None:
         resources = replace(
             self.cuda_resources,
-            cuda_memory_available=16 * GIB,
+            cuda_memory_available=24 * GIB,
         )
 
         self.assertEqual(select_qwen_model(resources), QWEN_8B_MODEL_NAME)

@@ -83,7 +83,7 @@ flowchart LR
 실행 직전에 CUDA의 가용 VRAM을 확인해 생성 모델을 선택합니다. RAM과 CPU 사양은 모델 전환 기준에 포함하지 않습니다.
 
 > [!TIP]
-> 가용 CUDA VRAM이 16GiB 이상이면 8B, 그보다 적거나 CUDA VRAM을 확인할 수 없는 Apple MPS·CPU 환경이면 4B를 선택합니다. 자동 선택을 재정의하려면 `QWEN_MODEL_NAME` 환경변수에 원하는 Hugging Face 모델 ID를 지정하세요.
+> 가용 CUDA VRAM이 24GiB 이상이면 8B, 그보다 적거나 CUDA VRAM을 확인할 수 없는 Apple MPS·CPU 환경이면 4B를 선택합니다. 자동 선택을 재정의하려면 `QWEN_MODEL_NAME` 환경변수에 원하는 Hugging Face 모델 ID를 지정하세요.
 
 ## 실행 환경
 

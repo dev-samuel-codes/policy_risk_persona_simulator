@@ -29,10 +29,10 @@ QWEN_4B_MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 QWEN_8B_MODEL_NAME = "Qwen/Qwen3-8B"
 QWEN_MODEL_NAME_ENV = "QWEN_MODEL_NAME"
 
-# 자동 전환은 모델을 올리기 직전의 가용 CUDA VRAM만 사용한다.
-# RAM과 CPU 정보는 로그 및 오프로딩 상한 계산에만 사용하고 모델 크기
-# 결정에는 반영하지 않는다.
-QWEN_8B_MIN_AVAILABLE_VRAM = 16 * GIB
+# 자동 전환은 모델을 올리기 직전의 가용 CUDA VRAM만 사용하며,
+# 24GiB 이상일 때 8B를 선택한다. RAM과 CPU 정보는 로그 및 오프로딩
+# 상한 계산에만 사용하고 모델 크기 결정에는 반영하지 않는다.
+QWEN_8B_MIN_AVAILABLE_VRAM = 24 * GIB
 
 CUDA_MEMORY_RESERVE = 1 * GIB
 CPU_MEMORY_RESERVE = 2 * GIB
