@@ -36,9 +36,7 @@ QWEN_8B_MIN_AVAILABLE_VRAM = 24 * GIB
 
 CUDA_MEMORY_RESERVE = 1 * GIB
 CPU_MEMORY_RESERVE = 2 * GIB
-CUDA_MAX_MEMORY_GIB = 9
 CPU_MAX_MEMORY_GIB = 22
-CUDA_MAX_MEMORY = f"{CUDA_MAX_MEMORY_GIB}GiB"
 CPU_MAX_MEMORY = f"{CPU_MAX_MEMORY_GIB}GiB"
 
 
@@ -108,20 +106,21 @@ def _memory_limit(
     available_memory: int,
     *,
     reserve_memory: int,
-    maximum_gib: int,
+    maximum_gib: int | None = None,
 ) -> str:
-    usable_memory = max(GIB, available_memory - reserve_memory)
-    return f"{min(maximum_gib, usable_memory // GIB)}GiB"
+    usable_gib = max(1, (available_memory - reserve_memory) // GIB)
+    if maximum_gib is not None:
+        usable_gib = min(maximum_gib, usable_gib)
+    return f"{usable_gib}GiB"
 
 
 def get_cuda_max_memory(resources: SystemResources) -> dict[int | str, str]:
-    """현재 여유 메모리를 넘지 않는 CUDA/CPU 배치 상한을 만든다."""
+    """현재 여유 VRAM에서 예약분을 뺀 CUDA/CPU 배치 상한을 만든다."""
     cuda_memory_available = resources.cuda_memory_available or GIB
     return {
         0: _memory_limit(
             cuda_memory_available,
             reserve_memory=CUDA_MEMORY_RESERVE,
-            maximum_gib=CUDA_MAX_MEMORY_GIB,
         ),
         "cpu": _memory_limit(
             resources.system_memory_available,

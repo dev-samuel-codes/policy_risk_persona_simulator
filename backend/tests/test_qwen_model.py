@@ -7,7 +7,6 @@ import torch
 
 from backend.ai_simulation_core.llm.qwen_model import (
     CPU_MAX_MEMORY,
-    CUDA_MAX_MEMORY,
     GIB,
     LLM,
     QWEN_4B_MODEL_NAME,
@@ -146,6 +145,29 @@ class QwenModelTest(unittest.TestCase):
             {0: "7GiB", "cpu": "14GiB"},
         )
 
+    def test_cuda_memory_limit_expands_for_exact_8b_threshold(self) -> None:
+        resources = replace(
+            self.cuda_resources,
+            system_memory_available=2 * GIB,
+            cuda_memory_available=24 * GIB,
+        )
+
+        self.assertEqual(
+            get_cuda_max_memory(resources),
+            {0: "23GiB", "cpu": "1GiB"},
+        )
+
+    def test_cuda_memory_limit_uses_available_vram_above_threshold(self) -> None:
+        resources = replace(
+            self.cuda_resources,
+            system_memory_available=2 * GIB,
+        )
+
+        self.assertEqual(
+            get_cuda_max_memory(resources),
+            {0: "24GiB", "cpu": "1GiB"},
+        )
+
     def test_environment_override_takes_priority_over_resource_check(self) -> None:
         resources = SystemResources(
             device_type="cpu",
@@ -162,7 +184,7 @@ class QwenModelTest(unittest.TestCase):
             QWEN_8B_MODEL_NAME,
         )
 
-    def test_cuda_loads_resource_selected_qwen3_8b_with_cpu_offload(self) -> None:
+    def test_cuda_loads_resource_selected_qwen3_8b_with_dynamic_memory(self) -> None:
         tokenizer = MagicMock()
         model = MagicMock()
 
@@ -189,7 +211,7 @@ class QwenModelTest(unittest.TestCase):
             QWEN_8B_MODEL_NAME,
             dtype=torch.bfloat16,
             device_map="auto",
-            max_memory={0: CUDA_MAX_MEMORY, "cpu": CPU_MAX_MEMORY},
+            max_memory={0: "24GiB", "cpu": CPU_MAX_MEMORY},
             offload_buffers=True,
         )
         model.to.assert_not_called()
