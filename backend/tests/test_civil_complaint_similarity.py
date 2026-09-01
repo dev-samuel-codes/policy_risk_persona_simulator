@@ -272,9 +272,6 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
         self.assertEqual(response["status"], "no_reliable_match")
         self.assertEqual(response["results"], [])
         self.assertEqual(response["rejection_counts"]["below_complaint_dense"], 1)
-        self.assertEqual(response["rejection_counts"]["domain"], 0)
-        self.assertEqual(response["rejection_counts"]["issue"], 0)
-        self.assertEqual(response["rejection_counts"]["qualification"], 0)
 
     def test_generic_support_language_cannot_bridge_unrelated_topics(self) -> None:
         detail = _detail(
@@ -431,10 +428,7 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
         self.assertIsNotNone(query)
         self.assertEqual(
             query,
-            {
-                "complaint_text": _query_item()["complaint_text"],
-                "combined_text": _query_item()["complaint_text"],
-            },
+            {"complaint_text": _query_item()["complaint_text"]},
         )
 
     def test_english_policy_terms_identify_supported_domains(self) -> None:
@@ -541,16 +535,6 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
         )
         self.assertNotIn(similarity.LEXICAL_FALLBACK_WARNING, result["warnings"])
 
-    def test_generated_complaint_recognizes_document_and_submission_language(
-        self,
-    ) -> None:
-        tags = similarity.issue_tags(
-            "임대차 계약서와 거주 증명서를 어디서 발급받고 어떻게 제출해야 하나요?"
-        )
-
-        self.assertIn("documents", tags)
-        self.assertIn("application_method", tags)
-
     def test_candidate_without_age_text_matches_by_text_only(self) -> None:
         detail = _detail(
             "housing-no-age",
@@ -591,7 +575,6 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             ).search_batch([_query_item()])[0]
 
         self.assertEqual(response["status"], "matched")
-        self.assertEqual(response["rejection_counts"]["age"], 0)
         self.assertEqual(
             response["results"][0]["evidence"]["matching_basis"],
             "complaint_text_similarity",
@@ -633,6 +616,7 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
         self.assertEqual(len(embedder.calls[0]), 2)
         self.assertEqual(len(collection.query_calls), 1)
         self.assertEqual(len(collection.query_calls[0]["query_embeddings"]), 2)
+        self.assertEqual(collection.query_calls[0]["n_results"], 1)
 
     def test_manifest_hash_change_fails_closed_before_query(self) -> None:
         detail = _relevant_detail()
@@ -726,10 +710,6 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
                     with patch.object(similarity, "lexical_score", return_value=1.0):
                         response = service.search_batch([_query_item()])[0]
                     self.assertEqual(response["status"], expected_status)
-                    self.assertEqual(response["rejection_counts"]["below_policy_dense"], 0)
-                    self.assertEqual(response["rejection_counts"]["below_semantic"], 0)
-                    self.assertEqual(response["rejection_counts"]["below_final"], 0)
-                    self.assertEqual(response["rejection_counts"]["below_ui_threshold"], 0)
 
     def test_missing_or_invalid_policy_and_persona_do_not_block_match(self) -> None:
         detail = _relevant_detail()
@@ -754,19 +734,10 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
 
         self.assertEqual([item["status"] for item in responses], ["matched", "matched"])
 
-    def test_shared_threshold_constants_and_response_contract(self) -> None:
+    def test_active_thresholds_and_response_contract(self) -> None:
         self.assertEqual(similarity.COMPLAINT_DENSE_FLOOR, 0.40)
-        self.assertEqual(similarity.POLICY_DENSE_FLOOR, 0.0)
-        self.assertEqual(similarity.SEMANTIC_FLOOR, 0.40)
-        self.assertEqual(similarity.FINAL_SCORE_FLOOR, 0.40)
-        self.assertEqual(similarity.UI_REFERENCE_SCORE_FLOOR, 0.40)
-        self.assertEqual(similarity.COMPLAINT_SEMANTIC_WEIGHT, 1.0)
-        self.assertEqual(similarity.POLICY_SEMANTIC_WEIGHT, 0.0)
-        self.assertEqual(similarity.FINAL_SEMANTIC_WEIGHT, 1.0)
-        self.assertEqual(similarity.FINAL_LEXICAL_WEIGHT, 0.0)
-        self.assertEqual(similarity.FINAL_CONTEXT_WEIGHT, 0.0)
         self.assertEqual(similarity.TOPIC_LEXICAL_FLOOR, 0.08)
-        self.assertEqual(similarity.MIN_CANDIDATE_COUNT, 300)
+        self.assertEqual(similarity.MAX_CANDIDATE_COUNT, 300)
 
         detail = _relevant_detail()
         with tempfile.TemporaryDirectory() as directory:

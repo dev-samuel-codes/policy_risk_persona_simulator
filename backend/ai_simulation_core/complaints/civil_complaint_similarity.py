@@ -15,7 +15,6 @@ import re
 import threading
 import time
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -27,7 +26,6 @@ from backend.ai_simulation_core.complaints.civil_complaint_corpus import (
     PROJECT_ROOT,
     civil_complaint_source_fingerprint,
     load_civil_complaint_corpus,
-    load_civil_complaint_source_metadata,
     normalize_text,
 )
 
@@ -41,25 +39,14 @@ ACTIVE_POINTER_SCHEMA_VERSION = 1
 ACTIVE_RELOAD_STRATEGY = "detect_active_pointer_per_request"
 
 # Eligibility uses the generated complaint's dense similarity plus a core-topic
-# overlap check. The legacy component constants remain in the response contract,
-# but policy, lexical, and context scores do not change the displayed score.
+# overlap check. Component score fields remain for response compatibility, but
+# only complaint-text dense similarity changes the displayed score.
 COMPLAINT_DENSE_FLOOR = 0.40
-POLICY_DENSE_FLOOR = 0.0
-SEMANTIC_FLOOR = 0.40
-FINAL_SCORE_FLOOR = 0.40
-UI_REFERENCE_SCORE_FLOOR = 0.40
-COMPLAINT_SEMANTIC_WEIGHT = 1.0
-POLICY_SEMANTIC_WEIGHT = 0.0
-FINAL_SEMANTIC_WEIGHT = 1.0
-FINAL_LEXICAL_WEIGHT = 0.0
-FINAL_CONTEXT_WEIGHT = 0.0
 TOPIC_LEXICAL_FLOOR = 0.08
 SCORE_EPSILON = 1e-7
 
 MAX_TOP_K = 5
-MIN_CANDIDATE_COUNT = 300
 MAX_CANDIDATE_COUNT = 300
-CANDIDATE_MULTIPLIER = 50
 
 COMMON_WARNINGS = [
     (
@@ -410,145 +397,6 @@ DOMAIN_LABELS = {
     "privacy_digital_rights": "개인정보·디지털 권리",
 }
 
-ISSUE_PATTERNS: dict[str, tuple[str, ...]] = {
-    "eligibility": (
-        "자격",
-        "대상자",
-        "지원대상",
-        "해당되",
-        "선정기준",
-        "선정 조건",
-        "지원 조건",
-        "요건",
-        "제외",
-        "받을 수",
-        "가능 여부",
-        "왜 안",
-    ),
-    "documents": (
-        "구비서류",
-        "신청서류",
-        "제출서류",
-        "제출 서류",
-        "제출할 서류",
-        "제출해야 하는 서류",
-        "필요한 서류",
-        "필요 서류",
-        "서류 준비",
-        "서류 제출",
-        "서류를 제출",
-        "증빙서류",
-        "증명서류",
-        "계약서",
-        "거주 증명",
-    ),
-    "application_method": (
-        "신청방법",
-        "신청 방법",
-        "신청절차",
-        "신청 절차",
-        "접수방법",
-        "접수 방법",
-        "어떻게 신청",
-        "제출절차",
-        "제출 절차",
-        "제출방법",
-        "제출 방법",
-        "발급절차",
-        "발급 절차",
-        "어디서 발급",
-        "어디에서 발급",
-        "어떻게 제출",
-        "발급처",
-    ),
-    "deadline": (
-        "신청기간",
-        "신청 기간",
-        "접수기간",
-        "접수 기간",
-        "신청기한",
-        "마감",
-        "언제까지",
-    ),
-    "payment": (
-        "지급액",
-        "지원액",
-        "지원금액",
-        "지급일",
-        "입금",
-        "얼마",
-        "수령",
-    ),
-    "appeal": ("이의신청", "불복", "재심", "반려", "처분 취소"),
-    "report": ("신고방법", "신고 방법", "민원 접수", "불편 신고"),
-}
-
-AGE_ISSUE_PATTERN = re.compile(
-    r"(?:나이|연령|만\s*\d{1,3}\s*세|\d{1,3}\s*세\s*(?:이상|이하|미만|초과))"
-)
-POLICY_AGE_CONTEXT_PATTERN = re.compile(
-    r"(?:나이|연령|청년|청소년|아동|노인|고령|만\s*\d{1,3}\s*세|\d{1,3}\s*세\s*(?:이상|이하|미만|초과))"
-)
-
-QUALIFICATION_PATTERNS: dict[str, tuple[str, ...]] = {
-    "veteran": ("제대군인", "보훈대상", "국가유공자", "상이군경"),
-    "disabled": ("장애인", "장애등록", "중증장애", "장애 정도"),
-    "farmer_fisher": (
-        "농어업인",
-        "농업인",
-        "어업인",
-        "축산업자",
-        "임업인",
-    ),
-    "single_parent": ("한부모", "미혼모", "미혼부"),
-    "multicultural": ("다문화가족", "결혼이민자"),
-    "basic_livelihood": ("기초생활수급", "수급권자", "차상위"),
-    "small_business": ("소상공인", "자영업자"),
-    "student": ("대학생", "재학생"),
-    "newlywed": ("신혼부부",),
-    "pregnant": ("임산부", "임신부"),
-}
-
-PROVINCE_ALIASES: dict[str, tuple[str, ...]] = {
-    "서울": ("서울특별시", "서울시", "서울"),
-    "부산": ("부산광역시", "부산시", "부산"),
-    "대구": ("대구광역시", "대구시", "대구"),
-    "인천": ("인천광역시", "인천시", "인천"),
-    "광주": ("광주광역시", "광주시", "광주"),
-    "대전": ("대전광역시", "대전시", "대전"),
-    "울산": ("울산광역시", "울산시", "울산"),
-    "세종": ("세종특별자치시", "세종시", "세종"),
-    "경기": ("경기도", "경기"),
-    "강원": ("강원특별자치도", "강원도", "강원"),
-    "충북": ("충청북도", "충북"),
-    "충남": ("충청남도", "충남"),
-    "전북": ("전북특별자치도", "전라북도", "전북"),
-    "전남": ("전라남도", "전남"),
-    "경북": ("경상북도", "경북"),
-    "경남": ("경상남도", "경남"),
-    "제주": ("제주특별자치도", "제주도", "제주"),
-}
-CENTRAL_ORGANIZATION_PATTERN = re.compile(
-    r"(?:^|\s)(?:[가-힣]+부|[가-힣]+처|[가-힣]+청|[가-힣]+위원회|국립[가-힣]+|[가-힣]+공단|[가-힣]+공사)(?:\s|$)"
-)
-
-AGE_RANGE_PATTERNS = (
-    re.compile(
-        r"(?:만\s*)?(\d{1,3})\s*세\s*(?:이상|부터)\s*(?:부터\s*)?.{0,24}?"
-        r"(?:만\s*)?(\d{1,3})\s*세\s*(?:이하|까지)"
-    ),
-    re.compile(
-        r"(?:만\s*)?(\d{1,3})\s*(?:세\s*)?(?:~|∼|～|－|-)\s*"
-        r"(?:만\s*)?(\d{1,3})\s*세"
-    ),
-    re.compile(
-        r"(?:만\s*)?(\d{1,3})\s*세\s*부터\s*(?:만\s*)?"
-        r"(\d{1,3})\s*세\s*까지"
-    ),
-)
-LOWER_AGE_PATTERN = re.compile(r"(?:만\s*)?(\d{1,3})\s*세\s*(이상|부터|초과)")
-UPPER_AGE_PATTERN = re.compile(r"(?:만\s*)?(\d{1,3})\s*세\s*(이하|까지|미만)")
-
 
 class CivilComplaintIndexUnavailableError(RuntimeError):
     """Raised when a verified public-FAQ index cannot be served."""
@@ -641,15 +489,6 @@ def resolve_active_index_dir(
     return resolved_dir, _sha256_bytes(pointer_bytes), pointer
 
 
-@dataclass(frozen=True)
-class AgeRange:
-    minimum: int | None
-    maximum: int | None
-
-    def as_dict(self) -> dict[str, int | None]:
-        return {"minimum": self.minimum, "maximum": self.maximum}
-
-
 def _contains_any(text: str, patterns: Sequence[str]) -> bool:
     return any(pattern in text for pattern in patterns)
 
@@ -665,18 +504,6 @@ def _tag_text(text: object, patterns: Mapping[str, Sequence[str]]) -> set[str]:
 
 def domain_tags(text: object) -> set[str]:
     return _tag_text(text, DOMAIN_PATTERNS)
-
-
-def issue_tags(text: object) -> set[str]:
-    normalized = normalize_text(text).lower()
-    tags = _tag_text(normalized, ISSUE_PATTERNS)
-    if AGE_ISSUE_PATTERN.search(normalized):
-        tags.update({"age", "eligibility"})
-    return tags
-
-
-def qualification_tags(text: object) -> set[str]:
-    return _tag_text(text, QUALIFICATION_PATTERNS)
 
 
 def _tokens(value: object) -> set[str]:
@@ -739,334 +566,8 @@ def _clip(value: object, limit: int = 1600) -> str:
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
 
 
-def _policy_field(policy: Mapping[str, Any], *names: str) -> str:
-    detail = policy.get("상세정보")
-    detail = detail if isinstance(detail, Mapping) else {}
-    listing = policy.get("목록정보")
-    listing = listing if isinstance(listing, Mapping) else {}
-    for name in names:
-        for container in (policy, detail, listing):
-            value = normalize_text(container.get(name))
-            if value:
-                return value
-    return ""
-
-
-def build_policy_context_document(policy: Mapping[str, Any]) -> str:
-    fields = (
-        ("정책명", ("policy_name", "서비스명")),
-        ("지원대상", ("target_audience", "지원대상")),
-        ("지원내용", ("benefits", "지원내용")),
-        ("선정기준", ("selection_criteria", "선정기준", "제외조건")),
-        ("분야", ("category", "서비스분야")),
-        ("지원유형", ("support_type", "지원유형")),
-    )
-    lines = []
-    for label, names in fields:
-        value = _policy_field(policy, *names)
-        if value:
-            lines.append(f"{label}: {value}")
-    return "\n".join(lines)
-
-
-def _persona_document(persona: Mapping[str, Any]) -> str:
-    fields = (
-        "occupation",
-        "persona",
-        "professional_persona",
-        "family_persona",
-        "selection_cohort",
-    )
-    return " ".join(normalize_text(persona.get(key)) for key in fields)
-
-
-def _canonical_province(value: object) -> str:
-    province, _ = _matched_province_alias(value)
-    return province
-
-
-def _matched_province_alias(value: object) -> tuple[str, str]:
-    text = normalize_text(value).replace("-", " ")
-    matches: list[tuple[int, str, str]] = []
-    for province, aliases in PROVINCE_ALIASES.items():
-        for alias in aliases:
-            index = text.find(alias)
-            if index >= 0:
-                matches.append((index, province, alias))
-    if not matches:
-        return "", ""
-    _, province, alias = min(matches, key=lambda item: (item[0], -len(item[2])))
-    return province, alias
-
-
-def _normalize_district(value: object, province: str = "") -> str:
-    text = normalize_text(value).replace("-", " ")
-    if province:
-        for alias in PROVINCE_ALIASES.get(province, ()):
-            text = text.replace(alias, " ")
-    return re.sub(r"[^0-9a-z가-힣]", "", text.lower())
-
-
-def organization_region(organization: object) -> dict[str, str]:
-    text = normalize_text(organization)
-    province, alias = _matched_province_alias(text)
-    if province:
-        alias_end = text.find(alias) + len(alias)
-        remainder = normalize_text(text[alias_end:])
-        district = _normalize_district(remainder, province)
-        return {
-            "kind": "local",
-            "province": province,
-            "district": district,
-            "raw": text,
-        }
-    if CENTRAL_ORGANIZATION_PATTERN.search(f" {text} "):
-        return {"kind": "central", "province": "", "district": "", "raw": text}
-    return {"kind": "unknown", "province": "", "district": "", "raw": text}
-
-
-def _policy_region(policy: Mapping[str, Any]) -> tuple[dict[str, str] | None, str]:
-    scope = normalize_text(policy.get("region_scope")).lower()
-    province_text = normalize_text(
-        policy.get("region_province") or policy.get("province")
-    )
-    district_text = normalize_text(
-        policy.get("region_district") or policy.get("district")
-    )
-    if not scope and province_text:
-        scope = "specific"
-    if scope not in {"nationwide", "specific"}:
-        return None, "policy_region_scope_unknown"
-    if scope == "nationwide":
-        if province_text or district_text:
-            return None, "nationwide_policy_has_local_region"
-        return {"scope": scope, "province": "", "district": ""}, ""
-
-    province = _canonical_province(province_text)
-    if not province:
-        return None, "policy_province_unknown"
-    district = _normalize_district(district_text, province)
-    return {"scope": scope, "province": province, "district": district}, ""
-
-
-def extract_age_ranges(value: object) -> tuple[AgeRange, ...]:
-    text = normalize_text(value)
-    ranges: set[AgeRange] = set()
-    for pattern in AGE_RANGE_PATTERNS:
-        for match in pattern.finditer(text):
-            minimum, maximum = (int(part) for part in match.groups())
-            if 0 <= minimum <= maximum <= 120:
-                ranges.add(AgeRange(minimum, maximum))
-    if ranges:
-        return tuple(
-            sorted(ranges, key=lambda item: (item.minimum or -1, item.maximum or 999))
-        )
-
-    lowers = [
-        int(value) + (1 if comparator == "초과" else 0)
-        for value, comparator in LOWER_AGE_PATTERN.findall(text)
-    ]
-    uppers = [
-        int(value) - (1 if comparator == "미만" else 0)
-        for value, comparator in UPPER_AGE_PATTERN.findall(text)
-    ]
-    if lowers and uppers:
-        for minimum in lowers:
-            for maximum in uppers:
-                if 0 <= minimum <= maximum <= 120:
-                    ranges.add(AgeRange(minimum, maximum))
-    elif lowers:
-        ranges.update(AgeRange(value, None) for value in lowers if 0 <= value <= 120)
-    elif uppers:
-        ranges.update(AgeRange(None, value) for value in uppers if 0 <= value <= 120)
-    return tuple(
-        sorted(
-            ranges,
-            key=lambda item: (
-                -1 if item.minimum is None else item.minimum,
-                999 if item.maximum is None else item.maximum,
-            ),
-        )
-    )
-
-
-def _optional_age(value: object) -> int | None:
-    if value is None or value == "" or isinstance(value, bool):
-        return None
-    try:
-        age = int(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return age if 0 <= age <= 120 else None
-
-
-def _policy_age_range(policy: Mapping[str, Any], policy_text: str) -> AgeRange | None:
-    minimum = _optional_age(policy.get("age_min"))
-    maximum = _optional_age(policy.get("age_max"))
-    if minimum is not None or maximum is not None:
-        if minimum is not None and maximum is not None and minimum > maximum:
-            return None
-        return AgeRange(minimum, maximum)
-    ranges = extract_age_ranges(policy_text)
-    return ranges[0] if len(ranges) == 1 else None
-
-
-def _persona_age_relationship(age: int, expected: AgeRange) -> str:
-    lower_ok = expected.minimum is None or age >= expected.minimum
-    upper_ok = expected.maximum is None or age <= expected.maximum
-    if lower_ok and upper_ok:
-        return "eligible"
-    if expected.minimum is not None and age == expected.minimum - 1:
-        return "lower_boundary"
-    if expected.maximum is not None and age == expected.maximum + 1:
-        return "upper_boundary"
-    return "outside"
-
-
-def _ranges_compatible(candidate: AgeRange, expected: AgeRange) -> bool:
-    if expected.minimum is not None and candidate.minimum != expected.minimum:
-        return False
-    if expected.maximum is not None and candidate.maximum != expected.maximum:
-        return False
-    return True
-
-
-def _set_overlap(left: set[str], right: set[str]) -> float:
-    if not left or not right:
-        return 0.0
-    return len(left & right) / len(left | right)
-
-
-def _region_gate(
-    query_region: Mapping[str, str], candidate_region: Mapping[str, str]
-) -> tuple[bool, dict[str, Any]]:
-    evidence = {
-        "policy_scope": query_region["scope"],
-        "policy_province": query_region["province"],
-        "policy_district": query_region["district"],
-        "candidate_kind": candidate_region["kind"],
-        "candidate_province": candidate_region["province"],
-        "candidate_district": candidate_region["district"],
-    }
-    if query_region["scope"] == "nationwide":
-        return True, {
-            **evidence,
-            "reason": "nationwide_policy",
-            "context_score": 1.0,
-        }
-    if candidate_region["kind"] == "central":
-        return True, {
-            **evidence,
-            "reason": "central_reference",
-            "context_score": 0.85,
-        }
-    if candidate_region["kind"] != "local":
-        return True, {
-            **evidence,
-            "reason": "candidate_region_unknown",
-            "context_score": 0.6,
-        }
-    if candidate_region["province"] != query_region["province"]:
-        return True, {
-            **evidence,
-            "reason": "different_region_reference",
-            "context_score": 0.85,
-        }
-    district = query_region["district"]
-    if district and candidate_region["district"] != district:
-        return True, {
-            **evidence,
-            "reason": "different_district_reference",
-            "context_score": 0.9,
-        }
-    return True, {
-        **evidence,
-        "reason": "same_applicable_region",
-        "context_score": 1.0,
-    }
-
-
-def _age_gate(
-    *,
-    active: bool,
-    expected: AgeRange | None,
-    persona: Mapping[str, Any],
-    candidate_answer: str,
-) -> tuple[bool, dict[str, Any]]:
-    if not active:
-        return True, {
-            "active": False,
-            "reason": "policy_has_no_age_issue",
-            "context_score": 1.0,
-        }
-    if expected is None:
-        return False, {
-            "active": True,
-            "reason": "policy_age_range_unknown",
-            "context_score": 0.0,
-        }
-    persona_age = _optional_age(persona.get("age"))
-    if persona_age is None:
-        return False, {
-            "active": True,
-            "policy_range": expected.as_dict(),
-            "reason": "persona_age_unknown",
-            "context_score": 0.0,
-        }
-    relationship = _persona_age_relationship(persona_age, expected)
-    candidate_ranges = extract_age_ranges(candidate_answer)
-    compatible = next(
-        (item for item in candidate_ranges if _ranges_compatible(item, expected)),
-        None,
-    )
-    evidence = {
-        "active": True,
-        "policy_range": expected.as_dict(),
-        "persona_age": persona_age,
-        "persona_relationship": relationship,
-        "candidate_ranges": [item.as_dict() for item in candidate_ranges],
-        "matched_candidate_range": compatible.as_dict() if compatible else None,
-    }
-    if relationship == "outside":
-        return False, {
-            **evidence,
-            "reason": "persona_outside_policy_or_boundary",
-            "context_score": 0.0,
-        }
-    if not candidate_ranges:
-        return True, {
-            **evidence,
-            "reason": "candidate_age_not_stated",
-            "context_score": 0.75,
-        }
-    if compatible is None:
-        return False, {
-            **evidence,
-            "reason": "candidate_age_range_mismatch",
-            "context_score": 0.0,
-        }
-    return True, {
-        **evidence,
-        "reason": "same_age_rule_relationship",
-        "context_score": 1.0,
-    }
-
-
 def _empty_rejection_counts() -> dict[str, int]:
-    return {
-        "topic": 0,
-        "region": 0,
-        "domain": 0,
-        "issue": 0,
-        "qualification": 0,
-        "age": 0,
-        "missing_dense_score": 0,
-        "below_complaint_dense": 0,
-        "below_policy_dense": 0,
-        "below_semantic": 0,
-        "below_final": 0,
-        "below_ui_threshold": 0,
-    }
+    return {"topic": 0, "below_complaint_dense": 0}
 
 
 def _embedding_matrix(embedder: Any, documents: list[str]) -> np.ndarray:
@@ -1110,163 +611,6 @@ def _distance_scores(raw: Mapping[str, Any], row_index: int) -> dict[str, float]
         score = max(0.0, min(1.0, 1.0 - float(distance)))
         scores[normalize_text(case_id)] = score
     return scores
-
-
-def _candidate_tags(record: Mapping[str, Any]) -> dict[str, set[str]]:
-    heading = f"{normalize_text(record.get('title'))} {normalize_text(record.get('question'))}"
-    full_text = f"{heading} {normalize_text(record.get('answer'))}"
-    return {
-        "domains": domain_tags(heading),
-        "issues": issue_tags(heading),
-        "qualifications": qualification_tags(full_text),
-    }
-
-
-def _hard_gate_evidence(
-    query: Mapping[str, Any], record: Mapping[str, Any]
-) -> tuple[list[str], dict[str, Any], float]:
-    tags = _candidate_tags(record)
-    candidate_region = organization_region(record.get("organization"))
-    region_ok, region_evidence = _region_gate(query["region"], candidate_region)
-    domain_matches = set(query["domains"]) & tags["domains"]
-    issue_matches = set(query["issues"]) & tags["issues"]
-    candidate_only_qualifications = tags["qualifications"] - set(
-        query["qualifications"]
-    )
-    age_ok, age_evidence = _age_gate(
-        active=bool(query["age_active"]),
-        expected=query["age_range"],
-        persona=query["persona"],
-        candidate_answer=normalize_text(record.get("answer")),
-    )
-
-    failures = []
-    if not region_ok:
-        failures.append("region")
-    if not query["domains"] or not tags["domains"] or not domain_matches:
-        failures.append("domain")
-    if not query["issues"] or not tags["issues"] or not issue_matches:
-        failures.append("issue")
-    if candidate_only_qualifications:
-        failures.append("qualification")
-    if not age_ok:
-        failures.append("age")
-
-    evidence = {
-        "region": region_evidence,
-        "domain_tags": sorted(domain_matches),
-        "query_domain_tags": sorted(query["domains"]),
-        "candidate_domain_tags": sorted(tags["domains"]),
-        "issue_tags": sorted(issue_matches),
-        "query_issue_tags": sorted(query["issues"]),
-        "candidate_issue_tags": sorted(tags["issues"]),
-        "qualification_tags": sorted(tags["qualifications"]),
-        "candidate_only_qualification_tags": sorted(candidate_only_qualifications),
-        "age": age_evidence,
-    }
-    context_parts = [
-        float(region_evidence.get("context_score", 0.0)),
-        _set_overlap(set(query["domains"]), tags["domains"]),
-        _set_overlap(set(query["issues"]), tags["issues"]),
-        1.0 if not candidate_only_qualifications else 0.0,
-        float(age_evidence.get("context_score", 0.0)),
-    ]
-    return failures, evidence, sum(context_parts) / len(context_parts)
-
-
-def _match_reasons(evidence: Mapping[str, Any]) -> list[dict[str, Any]]:
-    reasons: list[dict[str, Any]] = []
-    region = evidence["region"]
-    region_reason = region.get("reason")
-    if region_reason == "nationwide_policy":
-        reasons.append(
-            {"type": "region", "label": "전국 정책 참고 사례", "details": "전국"}
-        )
-    elif region_reason == "same_applicable_region":
-        reasons.append(
-            {
-                "type": "region",
-                "label": "정책 적용 지역 일치",
-                "details": {
-                    "province": region["policy_province"],
-                    "district": region["policy_district"],
-                },
-            }
-        )
-    elif region_reason in {
-        "different_region_reference",
-        "different_district_reference",
-    }:
-        reasons.append(
-            {
-                "type": "region",
-                "label": "타 지역 유사 공개 사례",
-                "details": {
-                    "province": region["candidate_province"],
-                    "district": region["candidate_district"],
-                },
-            }
-        )
-    elif region_reason == "central_reference":
-        reasons.append(
-            {"type": "region", "label": "중앙기관 공개 사례", "details": "전국 참고"}
-        )
-    reasons.append(
-        {
-            "type": "domain",
-            "label": "정책 분야 일치",
-            "details": evidence["domain_tags"],
-        }
-    )
-    reasons.append(
-        {
-            "type": "issue",
-            "label": "민원 의도 일치",
-            "details": evidence["issue_tags"],
-        }
-    )
-    if evidence["qualification_tags"]:
-        reasons.append(
-            {
-                "type": "qualification",
-                "label": "배타 자격 조건 일치",
-                "details": evidence["qualification_tags"],
-            }
-        )
-    if evidence["age"].get("reason") == "same_age_rule_relationship":
-        reasons.append(
-            {
-                "type": "age",
-                "label": "정책 연령 규칙과 페르소나 관계 일치",
-                "details": {
-                    "policy_range": evidence["age"].get("policy_range"),
-                    "persona_relationship": evidence["age"].get("persona_relationship"),
-                },
-            }
-        )
-    return reasons
-
-
-def _reference_warnings(evidence: Mapping[str, Any]) -> list[str]:
-    warnings: list[str] = []
-    region_reason = evidence["region"].get("reason")
-    if region_reason in {
-        "different_region_reference",
-        "different_district_reference",
-    }:
-        warnings.append(
-            "현재 정책과 다른 지역의 공개 사례이므로 실제 제출 절차와 담당 기관을 "
-            "별도로 확인해야 합니다."
-        )
-    elif region_reason == "candidate_region_unknown":
-        warnings.append(
-            "참고 사례의 적용 지역이 확인되지 않아 실제 절차를 그대로 적용할 수 없습니다."
-        )
-    if evidence["age"].get("reason") == "candidate_age_not_stated":
-        warnings.append(
-            "참고 사례에 동일한 연령 조건이 명시되지 않아 자격 판단 근거로 사용할 수 없습니다."
-        )
-    return warnings
 
 
 def _text_similarity_match_reasons(
@@ -1562,10 +906,7 @@ class CivilComplaintSimilarityService:
 
     @property
     def source_metadata(self) -> dict[str, Any]:
-        source = self.manifest.get("source")
-        if isinstance(source, dict) and source:
-            return dict(source)
-        return load_civil_complaint_source_metadata(self.data_dir)
+        return dict(self.manifest["source"])
 
     def _base_response(self) -> dict[str, Any]:
         return {
@@ -1582,10 +923,7 @@ class CivilComplaintSimilarityService:
         complaint_text = normalize_text(item.get("complaint_text"))
         if not complaint_text:
             return None, ["complaint_text_required"]
-        return {
-            "complaint_text": complaint_text,
-            "combined_text": complaint_text,
-        }, []
+        return {"complaint_text": complaint_text}, []
 
     def search_batch(
         self,
@@ -1646,11 +984,7 @@ class CivilComplaintSimilarityService:
             ]
             embeddings = _embedding_matrix(self.embedder, complaint_documents)
             collection_count = int(collection.count())
-            candidate_count = min(
-                max(top_k * CANDIDATE_MULTIPLIER, MIN_CANDIDATE_COUNT),
-                MAX_CANDIDATE_COUNT,
-                collection_count,
-            )
+            candidate_count = min(MAX_CANDIDATE_COUNT, collection_count)
             if candidate_count < 1:
                 raise CivilComplaintIndexUnavailableError(
                     "민원 FAQ Chroma collection이 비어 있습니다."
@@ -1674,21 +1008,16 @@ class CivilComplaintSimilarityService:
                 query = prepared[position]
                 assert query is not None
                 complaint_scores = _distance_scores(raw, batch_index)
-                candidate_ids = set(complaint_scores)
                 rejection_counts = _empty_rejection_counts()
                 ranked: list[tuple[float, float, str, dict[str, Any]]] = []
 
-                for case_id in candidate_ids:
+                for case_id, complaint_dense in complaint_scores.items():
                     record = corpus_by_id.get(case_id)
                     if record is None:
                         raise CivilComplaintIndexUnavailableError(
                             f"민원 FAQ Chroma ID가 canonical 정본에 없습니다: {case_id}"
                         )
 
-                    complaint_dense = complaint_scores.get(case_id)
-                    if complaint_dense is None:
-                        rejection_counts["missing_dense_score"] += 1
-                        continue
                     candidate_heading = f"{record['title']} {record['question']}"
                     lexical = lexical_score(query["complaint_text"], candidate_heading)
                     if complaint_dense + SCORE_EPSILON < COMPLAINT_DENSE_FLOOR:
@@ -1811,10 +1140,6 @@ __all__ = [
     "CivilComplaintIndexUnavailableError",
     "CivilComplaintSimilarityService",
     "COMPLAINT_DENSE_FLOOR",
-    "POLICY_DENSE_FLOOR",
-    "SEMANTIC_FLOOR",
-    "FINAL_SCORE_FLOOR",
-    "UI_REFERENCE_SCORE_FLOOR",
     "ACTIVE_POINTER_FILENAME",
     "ACTIVE_POINTER_SCHEMA_VERSION",
     "ACTIVE_RELOAD_STRATEGY",

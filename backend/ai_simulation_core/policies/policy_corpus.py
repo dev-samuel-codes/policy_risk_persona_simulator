@@ -14,19 +14,6 @@ POLICY_SOURCE_FILES = (
     "support_conditions.json",
 )
 
-SEARCH_FIELDS = (
-    "policy_name",
-    "purpose",
-    "category",
-    "support_type",
-    "target_audience",
-    "selection_criteria",
-    "benefits",
-    "application_period",
-    "application_method",
-)
-
-
 def normalize_text(value: object) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 

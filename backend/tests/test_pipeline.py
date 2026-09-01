@@ -130,8 +130,7 @@ class PipelineResultTest(unittest.TestCase):
         self.assertEqual(saved_citizen["complaints"][0]["reference_cases"], [])
         self.assertNotIn("realism_check", result)
 
-    def test_reference_search_runs_once_in_complaint_order_with_context(self) -> None:
-        policy = {"상세정보": {"서비스명": "청년 월세 지원"}}
+    def test_reference_search_runs_once_in_complaint_order(self) -> None:
         first_persona = {"uuid": "first", "age": 29, "province": "경기"}
         second_persona = {"uuid": "second", "age": 35, "province": "경기"}
         first_complaint = {
@@ -173,23 +172,12 @@ class PipelineResultTest(unittest.TestCase):
             },
         ]
 
-        pipeline.attach_complaint_reference_cases(
-            simulation_results,
-            policy=policy,
-        )
+        pipeline.attach_complaint_reference_cases(simulation_results)
 
         self.complaint_search.assert_called_once_with(
             [
-                {
-                    "complaint_text": "첫 번째 대화",
-                    "policy": policy,
-                    "persona": first_persona,
-                },
-                {
-                    "complaint_text": "대화 내용을 검색어로 사용해 주세요.",
-                    "policy": policy,
-                    "persona": second_persona,
-                },
+                {"complaint_text": "첫 번째 대화"},
+                {"complaint_text": "대화 내용을 검색어로 사용해 주세요."},
             ]
         )
         self.assertEqual(first_complaint["reference_cases"], [matched_case])
@@ -255,8 +243,7 @@ class PipelineResultTest(unittest.TestCase):
         complaint = {"complaint_text": " ", "dialogue": ""}
 
         pipeline.attach_complaint_reference_cases(
-            [{"persona": {"uuid": "empty"}, "complaints": [complaint]}],
-            policy={"상세정보": {"서비스명": "테스트 정책"}},
+            [{"persona": {"uuid": "empty"}, "complaints": [complaint]}]
         )
 
         self.complaint_search.assert_called_once_with([])
@@ -293,8 +280,7 @@ class PipelineResultTest(unittest.TestCase):
                             "persona": {"uuid": "citizen-1"},
                             "complaints": [valid_complaint, invalid_complaint],
                         }
-                    ],
-                    policy={"상세정보": {"서비스명": "테스트 정책"}},
+                    ]
                 )
 
                 self.complaint_search.assert_called_once()
@@ -319,8 +305,7 @@ class PipelineResultTest(unittest.TestCase):
         ]
 
         pipeline.attach_complaint_reference_cases(
-            [{"persona": {"uuid": "citizen-1"}, "complaints": [complaint]}],
-            policy={"상세정보": {"서비스명": "청년 월세 지원"}},
+            [{"persona": {"uuid": "citizen-1"}, "complaints": [complaint]}]
         )
 
         self.assertEqual(complaint["reference_cases"], [])
@@ -424,11 +409,9 @@ class PipelineResultTest(unittest.TestCase):
             [item["complaint_text"] for item in search_items],
             ["eligible", "lower-boundary", "upper-boundary"],
         )
-        self.assertEqual(
-            [item["persona"]["uuid"] for item in search_items],
-            ["eligible", "lower-boundary", "upper-boundary"],
+        self.assertTrue(
+            all(set(item) == {"complaint_text"} for item in search_items)
         )
-        self.assertTrue(all(item["policy"] is policy for item in search_items))
 
     def test_explicit_persona_failure_fails_the_whole_pipeline(self) -> None:
         policy = {"상세정보": {"서비스명": "청년 월세 지원"}}

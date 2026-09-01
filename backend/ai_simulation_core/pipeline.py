@@ -59,16 +59,11 @@ def _valid_reference_search_contract(status: object, reference_cases: object) ->
     return not reference_cases
 
 
-def attach_complaint_reference_cases(
-    simulation_results: list[dict],
-    *,
-    policy: dict,
-) -> None:
+def attach_complaint_reference_cases(simulation_results: list[dict]) -> None:
     searchable_complaints = []
     batch_items = []
 
     for citizen_result in simulation_results:
-        persona = citizen_result.get("persona", {})
         complaints = citizen_result.get("complaints", [])
         if not isinstance(complaints, list):
             continue
@@ -87,13 +82,7 @@ def attach_complaint_reference_cases(
                 continue
 
             searchable_complaints.append(complaint)
-            batch_items.append(
-                {
-                    "complaint_text": complaint_text,
-                    "policy": policy,
-                    "persona": persona,
-                }
-            )
+            batch_items.append({"complaint_text": complaint_text})
 
     try:
         search_results = find_similar_complaint_cases_batch(batch_items)
@@ -307,10 +296,7 @@ def _run_pipeline(
         print(civil_response["response"])
 
     # 모든 생성이 끝난 뒤 한 번의 배치 검색으로 민원 순서와 검색 결과를 연결한다.
-    attach_complaint_reference_cases(
-        simulation_results,
-        policy=selected_policy,
-    )
+    attach_complaint_reference_cases(simulation_results)
     complaint_reference_summary = compute_complaint_reference_summary(
         simulation_results
     )
