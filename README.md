@@ -226,6 +226,7 @@ data/
 
 scripts/
   data/                                정부24 정책 원천 갱신
+  qa/                                  고정 평가셋 기반 품질 측정
   rag/                                 정책·민원 인덱스 생성
   verify_submission.py                 제출 파일과 인덱스 무결성 검사
 ```
@@ -257,6 +258,12 @@ python scripts/rag/build_civil_complaint_index.py
 source .venv/bin/activate
 python -m unittest discover -s backend/tests -p 'test_*.py' -v
 python -m compileall -q backend scripts
+```
+
+공개 FAQ 정본의 관련·무관 38쌍을 실제 KR-SBERT 임베딩과 현재 매칭 기준으로 평가합니다. 명령은 임계값을 변경하지 않고 `precision`, `recall`, `F1`, `accuracy`와 혼동행렬을 JSON으로 출력합니다.
+
+```bash
+python scripts/qa/evaluate_civil_complaint_matching.py --device cpu
 ```
 
 프런트엔드 정적 검사와 빌드:

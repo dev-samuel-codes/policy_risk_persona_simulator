@@ -1,0 +1,444 @@
+{
+  "schema_version": 1,
+  "dataset_id": "civil_complaint_pair_eval_v1",
+  "label_definition": {
+    "true": "후보 FAQ가 query의 핵심 질문에 직접 답하거나 직접 참고가 된다.",
+    "false": "표현이나 절차 단어가 겹치더라도 후보 FAQ가 query의 핵심 질문에 답하지 않는다."
+  },
+  "labeling_method": "manual_direct_answer_relevance",
+  "source": {
+    "repository_commit": "25e736af6c198d3bc428f14f50198c30233af51f",
+    "detail_sha256": "4f6790174d35afa1812142ca237ed1fa841161af56846e885e225eb46aa3ee4d",
+    "metadata_sha256": "5458c9b84677bb1a93dfec28a6b6fb91c4a320ef11581c30942f7a9a9534aa03",
+    "raw_record_count": 2168,
+    "unique_count": 1344
+  },
+  "redistribution": {
+    "split_unit": "query_group",
+    "stratify_by": [
+      "domain"
+    ],
+    "constraint": "같은 query_group의 positive와 negative pair를 서로 다른 split으로 나누지 않는다.",
+    "case_id_reuse": false
+  },
+  "pairs": [
+    {
+      "pair_id": "housing-01-pos",
+      "query_group": "housing-01",
+      "domain": "housing",
+      "query_source": "synthetic_runtime_snapshot",
+      "query_text": "임대차 계약서와 거주 증명서의 발급 및 제출 절차에 대해 구체적인 안내가 필요합니다.",
+      "case_id": "6903268",
+      "candidate_title_snapshot": "민간임대주택 임대차계약 (변경)신고 방법 및 구비서류는 무엇인가요?",
+      "expected_match": true,
+      "rationale": "임대차계약 신고 방법과 제출 서류를 직접 안내하여 주거·서류 절차를 답합니다."
+    },
+    {
+      "pair_id": "housing-01-neg",
+      "query_group": "housing-01",
+      "domain": "housing",
+      "query_source": "synthetic_runtime_snapshot",
+      "query_text": "임대차 계약서와 거주 증명서의 발급 및 제출 절차에 대해 구체적인 안내가 필요합니다.",
+      "case_id": "6906509",
+      "candidate_title_snapshot": "범죄 피해 신고 작성을 외국어로 가능한지 여부",
+      "expected_match": false,
+      "rationale": "서류 작성·제출 표현은 겹치지만 외국어 범죄 신고 절차로 임대차나 거주 증명과 무관합니다."
+    },
+    {
+      "pair_id": "housing-02-pos",
+      "query_group": "housing-02",
+      "domain": "housing",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "전세사기 피해자로 결정된 뒤 받을 수 있는 긴급 주거지원과 신청 방법을 알고 싶습니다.",
+      "case_id": "6900166",
+      "candidate_title_snapshot": "전세사기 피해자에 대한 긴급주거지원 및 관련 지원사업 문의",
+      "expected_match": true,
+      "rationale": "전세사기 피해자 결정 이후 긴급주거지원 신청 경로와 관련 지원을 직접 설명합니다."
+    },
+    {
+      "pair_id": "housing-02-neg",
+      "query_group": "housing-02",
+      "domain": "housing",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "전세사기 피해자로 결정된 뒤 받을 수 있는 긴급 주거지원과 신청 방법을 알고 싶습니다.",
+      "case_id": "6907255",
+      "candidate_title_snapshot": "범죄피해자안전조치 신청 절차 안내",
+      "expected_match": false,
+      "rationale": "피해자·지원·신청 표현은 겹치지만 경찰 신변보호 제도이며 주거지원이 아닙니다."
+    },
+    {
+      "pair_id": "communications-platform-01-pos",
+      "query_group": "communications-platform-01",
+      "domain": "communications_platform",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "학교에서 학생의 휴대전화 사용을 일괄 제한하는 것이 허용되는지 알고 싶습니다.",
+      "case_id": "6905907",
+      "candidate_title_snapshot": "학교에서 휴대전화 사용을 제한하는 것은 인권침해 아닌가요?",
+      "expected_match": true,
+      "rationale": "학교의 학생 휴대전화 사용 제한 근거와 예외를 직접 설명합니다."
+    },
+    {
+      "pair_id": "communications-platform-01-neg",
+      "query_group": "communications-platform-01",
+      "domain": "communications_platform",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "학교에서 학생의 휴대전화 사용을 일괄 제한하는 것이 허용되는지 알고 싶습니다.",
+      "case_id": "6907867",
+      "candidate_title_snapshot": "초중고등학교에서 유예, 면제, 자퇴 및 퇴학 등으로 학업을 중단한 학생의 경우 반드시",
+      "expected_match": false,
+      "rationale": "학교와 학생 권리 맥락은 겹치지만 학업중단 학생의 개인정보 연계 문제이며 휴대전화 제한이 아닙니다."
+    },
+    {
+      "pair_id": "communications-platform-02-pos",
+      "query_group": "communications-platform-02",
+      "domain": "communications_platform",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "학교 휴대전화 사용 규칙을 개정할 때 학생과 학부모 의견을 반영해야 하나요?",
+      "case_id": "6905407",
+      "candidate_title_snapshot": "휴대전화 사용 등 학칙 개정 권고 요구",
+      "expected_match": true,
+      "rationale": "휴대전화 관련 학칙 개정 시 학생·학부모·교원 의견 수렴을 직접 다룹니다."
+    },
+    {
+      "pair_id": "communications-platform-02-neg",
+      "query_group": "communications-platform-02",
+      "domain": "communications_platform",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "학교 휴대전화 사용 규칙을 개정할 때 학생과 학부모 의견을 반영해야 하나요?",
+      "case_id": "6910216",
+      "candidate_title_snapshot": "학교에서 개인정보 보호 및 정보보안대책 관련 업무 도움방법 문의",
+      "expected_match": false,
+      "rationale": "학교·정보 관련 표현은 겹치지만 개인정보 및 보안 업무 자료 안내로 휴대전화 학칙 개정과 무관합니다."
+    },
+    {
+      "pair_id": "public-safety-01-pos",
+      "query_group": "public-safety-01",
+      "domain": "public_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "경찰의 불송치 결정에 이의를 제기하려면 어떤 절차를 밟아야 하나요?",
+      "case_id": "6892938",
+      "candidate_title_snapshot": "담당 수사관의 잘못된 수사는 어떻게 구제받을 수 있나요?",
+      "expected_match": true,
+      "rationale": "불송치 결정에 대한 수사이의·수사심의 신청 절차를 직접 안내합니다."
+    },
+    {
+      "pair_id": "public-safety-01-neg",
+      "query_group": "public-safety-01",
+      "domain": "public_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "경찰의 불송치 결정에 이의를 제기하려면 어떤 절차를 밟아야 하나요?",
+      "case_id": "6895419",
+      "candidate_title_snapshot": "전세사기피해자등 결정신청",
+      "expected_match": false,
+      "rationale": "결정·신청·서류 표현은 겹치지만 전세사기 피해자 결정신청이며 경찰 수사결정 이의절차가 아닙니다."
+    },
+    {
+      "pair_id": "public-safety-02-pos",
+      "query_group": "public-safety-02",
+      "domain": "public_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "지속적인 괴롭힘으로 신변에 위협을 느낄 때 경찰 안전조치를 어떻게 신청하나요?",
+      "case_id": "6892955",
+      "candidate_title_snapshot": "범죄 피해자 안전조치 요청",
+      "expected_match": true,
+      "rationale": "괴롭힘과 신변위협 상황에서 범죄피해자 안전조치를 신청하는 요건과 절차를 직접 다룹니다."
+    },
+    {
+      "pair_id": "public-safety-02-neg",
+      "query_group": "public-safety-02",
+      "domain": "public_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "지속적인 괴롭힘으로 신변에 위협을 느낄 때 경찰 안전조치를 어떻게 신청하나요?",
+      "case_id": "6908199",
+      "candidate_title_snapshot": "대전 전세사기피해자 지원사항",
+      "expected_match": false,
+      "rationale": "피해자·지원 표현은 겹치지만 전세사기 피해자의 주거·금융 지원이며 신변 안전조치가 아닙니다."
+    },
+    {
+      "pair_id": "disaster-safety-01-pos",
+      "query_group": "disaster-safety-01",
+      "domain": "disaster_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "아파트 공용 복도에 자전거와 킥보드를 두면 피난 통로 관련 소방법 위반인가요?",
+      "case_id": "6909950",
+      "candidate_title_snapshot": "아파트 공용 복도부분에 킥보드, 자전거 등의 보관 및 소방법 자가 점검 확인 등",
+      "expected_match": true,
+      "rationale": "아파트 복도 적치물의 피난 방해 여부와 소방법상 허용 예외를 직접 설명합니다."
+    },
+    {
+      "pair_id": "disaster-safety-01-neg",
+      "query_group": "disaster-safety-01",
+      "domain": "disaster_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "아파트 공용 복도에 자전거와 킥보드를 두면 피난 통로 관련 소방법 위반인가요?",
+      "case_id": "6909867",
+      "candidate_title_snapshot": "전입신고 및 임대차신고를 통한 임차인 보호(대항력과 우선변제권 취득)",
+      "expected_match": false,
+      "rationale": "아파트·주거 맥락은 겹치지만 임차권 보호와 전입신고 문제로 피난·소방과 무관합니다."
+    },
+    {
+      "pair_id": "disaster-safety-02-pos",
+      "query_group": "disaster-safety-02",
+      "domain": "disaster_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "건물 일부를 증축하거나 용도 변경할 때 소방시설을 추가로 설치해야 하나요?",
+      "case_id": "6910278",
+      "candidate_title_snapshot": "특정소방대상물 일부를 증축하거나 용도변경하는 경우 소방시설을 추가 설치해야 하는지?",
+      "expected_match": true,
+      "rationale": "증축·용도변경 시 적용되는 소방시설 설치 기준을 직접 답합니다."
+    },
+    {
+      "pair_id": "disaster-safety-02-neg",
+      "query_group": "disaster-safety-02",
+      "domain": "disaster_safety",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "건물 일부를 증축하거나 용도 변경할 때 소방시설을 추가로 설치해야 하나요?",
+      "case_id": "6900002",
+      "candidate_title_snapshot": "주거이전비 신청",
+      "expected_match": false,
+      "rationale": "건물·신청·구비서류 맥락은 겹치지만 공익사업 주거이전비로 소방시설 설치 기준이 아닙니다."
+    },
+    {
+      "pair_id": "consumer-protection-01-pos",
+      "query_group": "consumer-protection-01",
+      "domain": "consumer_protection",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "소비자 피해를 상담하고 구제받을 수 있는 기관과 연락 방법을 알고 싶습니다.",
+      "case_id": "6901273",
+      "candidate_title_snapshot": "강원특별자치도에도 소비자 피해구제를 위한 센터가 있나요?",
+      "expected_match": true,
+      "rationale": "소비생활센터와 1372 상담센터의 전화·인터넷 상담 경로를 직접 안내합니다."
+    },
+    {
+      "pair_id": "consumer-protection-01-neg",
+      "query_group": "consumer-protection-01",
+      "domain": "consumer_protection",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "소비자 피해를 상담하고 구제받을 수 있는 기관과 연락 방법을 알고 싶습니다.",
+      "case_id": "6904514",
+      "candidate_title_snapshot": "전화연결 어려움",
+      "expected_match": false,
+      "rationale": "기관 연락과 상담 표현은 겹치지만 출입국 외국인청 전화 연결 민원으로 소비자 피해구제가 아닙니다."
+    },
+    {
+      "pair_id": "immigration-foreigners-01-pos",
+      "query_group": "immigration-foreigners-01",
+      "domain": "immigration_foreigners",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "체류 외국인이 참여할 수 있는 사회통합프로그램의 운영기관과 신청 방법이 궁금합니다.",
+      "case_id": "6904413",
+      "candidate_title_snapshot": "체류 외국인대상 사회통합프로그램 안내",
+      "expected_match": true,
+      "rationale": "합법 체류 외국인의 사회통합프로그램 대상·기관·운영체계를 직접 설명합니다."
+    },
+    {
+      "pair_id": "immigration-foreigners-01-neg",
+      "query_group": "immigration-foreigners-01",
+      "domain": "immigration_foreigners",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "체류 외국인이 참여할 수 있는 사회통합프로그램의 운영기관과 신청 방법이 궁금합니다.",
+      "case_id": "6892812",
+      "candidate_title_snapshot": "자립준비청년 지원제도",
+      "expected_match": false,
+      "rationale": "사회지원 프로그램 표현은 겹치지만 자립준비청년 대상 제도이며 체류 외국인 통합과 무관합니다."
+    },
+    {
+      "pair_id": "immigration-foreigners-02-pos",
+      "query_group": "immigration-foreigners-02",
+      "domain": "immigration_foreigners",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "E-2 비자를 가진 외국인 강사를 채용할 때 제출받아야 할 서류가 무엇인가요?",
+      "case_id": "6905707",
+      "candidate_title_snapshot": "외국인강사 채용 시 필요 서류",
+      "expected_match": true,
+      "rationale": "E-2 외국인 강사 채용 시 검증할 범죄경력·건강·학력·비자 서류를 직접 안내합니다."
+    },
+    {
+      "pair_id": "immigration-foreigners-02-neg",
+      "query_group": "immigration-foreigners-02",
+      "domain": "immigration_foreigners",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "E-2 비자를 가진 외국인 강사를 채용할 때 제출받아야 할 서류가 무엇인가요?",
+      "case_id": "6900908",
+      "candidate_title_snapshot": "외국인의 국내학교 편입학 절차",
+      "expected_match": false,
+      "rationale": "외국인·학교·구비서류 표현은 겹치지만 외국인 학생 편입학 서류이며 E-2 강사 채용서류가 아닙니다."
+    },
+    {
+      "pair_id": "defense-veterans-01-pos",
+      "query_group": "defense-veterans-01",
+      "domain": "defense_veterans",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "현역병 복무 중 가입한 장병내일준비적금을 사회복무요원 전환 후 다시 가입할 수 있나요?",
+      "case_id": "6907051",
+      "candidate_title_snapshot": "현역 복무 중 사회복무요원 역종 변경자인데 현역병때 가입했던 장병내일준비적금 만기해지 후",
+      "expected_match": true,
+      "rationale": "현역병에서 사회복무요원으로 역종 변경한 뒤 적금 만기해지·추가가입 가능 여부를 직접 답합니다."
+    },
+    {
+      "pair_id": "defense-veterans-01-neg",
+      "query_group": "defense-veterans-01",
+      "domain": "defense_veterans",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "현역병 복무 중 가입한 장병내일준비적금을 사회복무요원 전환 후 다시 가입할 수 있나요?",
+      "case_id": "6910049",
+      "candidate_title_snapshot": "군포시 신혼부부 및 청년 전월세 보증금 대출이자 지원사업",
+      "expected_match": false,
+      "rationale": "청년 금융지원 표현은 겹치지만 전월세 대출이자 사업이며 군 복무·장병 적금과 무관합니다."
+    },
+    {
+      "pair_id": "defense-veterans-02-pos",
+      "query_group": "defense-veterans-02",
+      "domain": "defense_veterans",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "제대군인 전입지원금의 지급 대상과 금액 기준을 알고 싶습니다.",
+      "case_id": "6905610",
+      "candidate_title_snapshot": "제대군인 전입지원금 지급 기준이 어떻게 되나요?",
+      "expected_match": true,
+      "rationale": "포천시 제대군인 전입지원금의 복무·전입 요건과 지급 금액을 직접 안내합니다."
+    },
+    {
+      "pair_id": "defense-veterans-02-neg",
+      "query_group": "defense-veterans-02",
+      "domain": "defense_veterans",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "제대군인 전입지원금의 지급 대상과 금액 기준을 알고 싶습니다.",
+      "case_id": "6909391",
+      "candidate_title_snapshot": "주거취약계층 이사비지원사업 신청대상과 구비서류 및 지원내용이 어떻게 되나요?",
+      "expected_match": false,
+      "rationale": "전입·지원 대상·금액 표현은 겹치지만 주거취약계층 이사비 사업이며 제대군인 지원이 아닙니다."
+    },
+    {
+      "pair_id": "animal-welfare-01-pos",
+      "query_group": "animal-welfare-01",
+      "domain": "animal_welfare",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "취약계층이 반려동물 진료비를 지원받을 수 있는 대상과 신청 조건이 궁금합니다.",
+      "case_id": "6893790",
+      "candidate_title_snapshot": "취약계층을 위한 반려동물 진료 혜택이 궁금합니다.",
+      "expected_match": true,
+      "rationale": "취약계층 반려동물 진료비의 대상 동물·지원 범위·신청 방법을 직접 설명합니다."
+    },
+    {
+      "pair_id": "animal-welfare-01-neg",
+      "query_group": "animal-welfare-01",
+      "domain": "animal_welfare",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "취약계층이 반려동물 진료비를 지원받을 수 있는 대상과 신청 조건이 궁금합니다.",
+      "case_id": "6902181",
+      "candidate_title_snapshot": "성폭력피해자 의료비 지원 신청 관련",
+      "expected_match": false,
+      "rationale": "의료비 지원·신청 표현은 겹치지만 사람 대상 성폭력 피해 의료비로 반려동물 진료가 아닙니다."
+    },
+    {
+      "pair_id": "animal-welfare-02-pos",
+      "query_group": "animal-welfare-02",
+      "domain": "animal_welfare",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "반려동물 동반 음식점이 확인해야 하는 예방접종 종류는 무엇인가요?",
+      "case_id": "6910232",
+      "candidate_title_snapshot": "반려동물 동반출입 음식점 운영 시, 영업자가 반드시 확인할 반려동물 예방접종의 종류는 뭔가",
+      "expected_match": true,
+      "rationale": "반려동물 동반 음식점이 확인해야 할 광견병 등 예방접종을 직접 답합니다."
+    },
+    {
+      "pair_id": "animal-welfare-02-neg",
+      "query_group": "animal-welfare-02",
+      "domain": "animal_welfare",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "반려동물 동반 음식점이 확인해야 하는 예방접종 종류는 무엇인가요?",
+      "case_id": "6905010",
+      "candidate_title_snapshot": "대전 서구보건소 접종 가능 백신",
+      "expected_match": false,
+      "rationale": "예방접종·백신 표현은 강하게 겹치지만 사람 대상 보건소 접종으로 음식점의 반려동물 확인 의무가 아닙니다."
+    },
+    {
+      "pair_id": "privacy-digital-rights-01-pos",
+      "query_group": "privacy-digital-rights-01",
+      "domain": "privacy_digital_rights",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "개인정보 보호 인증을 받은 기업에서 유출 사고가 나면 과태료 감경이 가능한가요?",
+      "case_id": "6894268",
+      "candidate_title_snapshot": "개인정보 보호 관련 국제인증을 받은 기업에서 개인정보 유출 발생시 과태료 감경 여부 문의",
+      "expected_match": true,
+      "rationale": "ISO 개인정보·정보보호 인증 범위와 과태료 감경 가능 여부를 직접 설명합니다."
+    },
+    {
+      "pair_id": "privacy-digital-rights-01-neg",
+      "query_group": "privacy-digital-rights-01",
+      "domain": "privacy_digital_rights",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "개인정보 보호 인증을 받은 기업에서 유출 사고가 나면 과태료 감경이 가능한가요?",
+      "case_id": "6907183",
+      "candidate_title_snapshot": "국가유공자의 전기차 구매시 취득세 감면",
+      "expected_match": false,
+      "rationale": "감경·감면과 법적 요건 표현은 겹치지만 차량 취득세 혜택이며 개인정보 유출 과태료가 아닙니다."
+    },
+    {
+      "pair_id": "privacy-digital-rights-02-pos",
+      "query_group": "privacy-digital-rights-02",
+      "domain": "privacy_digital_rights",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "방과후학교 강사 채용 단계에서 주민등록번호 전체를 수집해도 되나요?",
+      "case_id": "6910219",
+      "candidate_title_snapshot": "방과후학교 강사 채용 시 주민등록번호 수집 가능 여부 문의",
+      "expected_match": true,
+      "rationale": "채용 지원 단계의 주민등록번호 수집이 개인정보 보호법상 가능한지 직접 답합니다."
+    },
+    {
+      "pair_id": "privacy-digital-rights-02-neg",
+      "query_group": "privacy-digital-rights-02",
+      "domain": "privacy_digital_rights",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "방과후학교 강사 채용 단계에서 주민등록번호 전체를 수집해도 되나요?",
+      "case_id": "6908148",
+      "candidate_title_snapshot": "중증장애인 등록자 병역판정검사 실시여부 및 필요서류 문의",
+      "expected_match": false,
+      "rationale": "등록·개인정보성 서류 표현은 일부 겹치지만 병역판정검사와 장애등록 서류 문제로 채용 개인정보 수집과 무관합니다."
+    },
+    {
+      "pair_id": "lexical-fallback-01-pos",
+      "query_group": "lexical-fallback-01",
+      "domain": "lexical_fallback",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "국선대리인의 지원 요건과 신청 방법을 알고 싶습니다.",
+      "case_id": "6898365",
+      "candidate_title_snapshot": "국선대리인 지원 받는 요건",
+      "expected_match": true,
+      "rationale": "국선대리인 지원 요건을 직접 안내하며 양쪽 모두 현재 핵심 분야 사전에 포함되지 않습니다."
+    },
+    {
+      "pair_id": "lexical-fallback-01-neg",
+      "query_group": "lexical-fallback-01",
+      "domain": "lexical_fallback",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "국선대리인의 지원 요건과 신청 방법을 알고 싶습니다.",
+      "case_id": "6891733",
+      "candidate_title_snapshot": "(예비)사회적기업이란 무엇인가요?",
+      "expected_match": false,
+      "rationale": "국선대리인과 무관한 사회적기업 정의이며 양쪽 모두 현재 핵심 분야 사전에 포함되지 않습니다."
+    },
+    {
+      "pair_id": "lexical-fallback-02-pos",
+      "query_group": "lexical-fallback-02",
+      "domain": "lexical_fallback",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "기초연금 신청 절차와 방법을 알려 주세요.",
+      "case_id": "6901948",
+      "candidate_title_snapshot": "기초연금 신청 방법",
+      "expected_match": true,
+      "rationale": "기초연금 신청 방법을 직접 답하며 양쪽 모두 현재 핵심 분야 사전에 포함되지 않습니다."
+    },
+    {
+      "pair_id": "lexical-fallback-02-neg",
+      "query_group": "lexical-fallback-02",
+      "domain": "lexical_fallback",
+      "query_source": "human_curated_paraphrase",
+      "query_text": "기초연금 신청 절차와 방법을 알려 주세요.",
+      "case_id": "6892652",
+      "candidate_title_snapshot": "배달음식 원산지 표시를 해야하나요?",
+      "expected_match": false,
+      "rationale": "기초연금과 무관한 음식 원산지 표시 문의이며 양쪽 모두 현재 핵심 분야 사전에 포함되지 않습니다."
+    }
+  ]
+}
