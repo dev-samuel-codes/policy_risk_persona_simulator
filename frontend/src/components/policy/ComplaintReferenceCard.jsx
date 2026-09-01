@@ -117,6 +117,18 @@ function normalizeEvidence(referenceCase) {
   return [];
 }
 
+function normalizeWarnings(...sources) {
+  return [
+    ...new Set(
+      sources
+        .flatMap((source) => (Array.isArray(source) ? source : []))
+        .filter((warning) => typeof warning === "string")
+        .map((warning) => warning.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 function referenceSearchStatus(complaint) {
   const search = complaint?.precedent_search;
   return typeof search === "string" ? search : search?.status;
@@ -232,6 +244,10 @@ export function ComplaintReferenceCard({ complaint }) {
   const { date, laws, organization, score, title } =
     getReferenceCaseDetails(referenceCase);
   const evidence = normalizeEvidence(referenceCase);
+  const warnings = normalizeWarnings(
+    referenceCase?.warnings,
+    complaint?.precedent_search?.warnings,
+  );
 
   return (
     <article
@@ -240,7 +256,7 @@ export function ComplaintReferenceCard({ complaint }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-[11px] font-semibold leading-5 text-slate">
-          조건이 확인된 공개 민원 Q&amp;A 참고 사례
+          민원 문구와 핵심 주제가 유사한 공개 민원 Q&amp;A 참고 사례
         </p>
         {score !== null && (
           <span className="rounded-pill bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand">
@@ -267,7 +283,7 @@ export function ComplaintReferenceCard({ complaint }) {
 
       {evidence.length > 0 && (
         <div className="mt-3">
-          <p className="text-[11px] font-semibold text-slate">확인된 연결 근거</p>
+          <p className="text-[11px] font-semibold text-slate">검색 연결 기준</p>
           <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[11px] leading-5 text-slate">
             {evidence.map((item) => (
               <li key={item.key}>{item.label}</li>
@@ -276,12 +292,20 @@ export function ComplaintReferenceCard({ complaint }) {
         </div>
       )}
 
-      <p
+      <div
         id={descriptionId}
         className="mt-3 border-t border-[#dde3ea] pt-2.5 text-[10px] leading-4 text-slate"
       >
-        검색 유사도 점수는 동일 민원 판정이나 발생 가능성을 뜻하지 않습니다.
-      </p>
+        {warnings.length > 0 ? (
+          <ul className="mt-1.5 list-disc space-y-1 pl-4">
+            {warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>검색 유사도 점수는 동일 민원 판정이나 발생 가능성을 뜻하지 않습니다.</p>
+        )}
+      </div>
     </article>
   );
 }

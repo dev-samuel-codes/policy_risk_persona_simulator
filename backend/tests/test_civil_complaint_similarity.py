@@ -372,7 +372,11 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             {reason["label"] for reason in result["match_reasons"]},
         )
         self.assertTrue(
-            any("지역·연령·분야·자격 조건과 관계없이" in warning for warning in result["warnings"])
+            any(
+                "지역·연령·자격 조건은 확인하지 않고" in warning
+                and "민원 문구 유사도와 핵심 주제 일치" in warning
+                for warning in result["warnings"]
+            )
         )
 
     def test_policy_scope_does_not_change_text_match(self) -> None:
