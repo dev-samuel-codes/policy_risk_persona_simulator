@@ -451,11 +451,95 @@ class CivilComplaintSimilarityTest(unittest.TestCase):
             "Waste and water quality program": "environment",
             "Culture, sports, and library access": "culture_sports",
             "Permit and certificate registration": "legal_administration",
+            "Mobile phone telecommunication fee": "communications",
+            "Police investigation of a crime": "security_crime",
+            "Wildfire disaster evacuation": "disaster_safety",
+            "Consumer refund and recall": "consumer_protection",
+            "Foreigner visa and immigration": "immigration",
+            "Military veteran support": "defense_veterans",
+            "Pet animal welfare": "animal_welfare",
+            "Personal data privacy breach": "privacy_digital_rights",
         }
 
         for text, expected in cases.items():
             with self.subTest(text=text):
                 self.assertIn(expected, similarity.domain_tags(text))
+
+    def test_korean_terms_identify_expanded_core_topics(self) -> None:
+        cases = {
+            "휴대전화 번호이동과 통신요금 문의": "communications",
+            "경찰 수사기관의 형사사건 처리": "security_crime",
+            "산불 화재 대피소와 소방 대응": "disaster_safety",
+            "소비자 환불과 청약철회 피해구제": "consumer_protection",
+            "외국인 체류자격과 비자 발급": "immigration",
+            "군 장병 내일준비적금과 사회복무요원": "defense_veterans",
+            "유기동물 동물등록과 반려동물": "animal_welfare",
+            "개인정보 정보유출과 명의도용": "privacy_digital_rights",
+        }
+
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertIn(expected, similarity.domain_tags(text))
+
+    def test_different_expanded_topics_block_generic_lexical_overlap(self) -> None:
+        matched, evidence = similarity._topic_overlap_evidence(
+            "휴대전화 통신요금 지원 문의",
+            "반려동물 등록 지원 문의",
+            lexical=1.0,
+        )
+
+        self.assertFalse(matched)
+        self.assertEqual(evidence["basis"], "conflicting_core_topics")
+        self.assertEqual(evidence["shared_domains"], [])
+
+    def test_lexical_fallback_is_always_low_confidence_and_warned(self) -> None:
+        detail = _detail(
+            "unclassified-reservation",
+            title="온라인 예약 변경 문의",
+            question="예약 일정을 변경할 수 있나요?",
+            answer="예약 페이지에서 변경할 수 있습니다.",
+            organization="행정서비스센터",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            _write_data(data_dir, [detail])
+            service = _service(
+                data_dir,
+                collection=FakeCollection(count=1, ids=[detail["faqNo"]]),
+            )
+            with patch.object(similarity, "lexical_score", return_value=1.0):
+                response = service.search_batch(
+                    [{"complaint_text": "온라인 예약 일정을 변경하고 싶습니다."}]
+                )[0]
+
+        self.assertEqual(response["status"], "matched")
+        result = response["results"][0]
+        self.assertEqual(result["confidence"], "low")
+        self.assertEqual(
+            result["evidence"]["topic_overlap"]["basis"],
+            "lexical_fallback",
+        )
+        self.assertIn(similarity.LEXICAL_FALLBACK_WARNING, result["warnings"])
+        self.assertNotIn(similarity.LEXICAL_FALLBACK_WARNING, response["warnings"])
+
+    def test_shared_known_topic_can_keep_medium_confidence(self) -> None:
+        detail = _relevant_detail()
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            _write_data(data_dir, [detail])
+            response = _service(
+                data_dir,
+                collection=FakeCollection(count=1, ids=[detail["faqNo"]]),
+            ).search_batch([_query_item()])[0]
+
+        self.assertEqual(response["status"], "matched")
+        result = response["results"][0]
+        self.assertEqual(result["confidence"], "medium")
+        self.assertEqual(
+            result["evidence"]["topic_overlap"]["basis"],
+            "shared_core_topic",
+        )
+        self.assertNotIn(similarity.LEXICAL_FALLBACK_WARNING, result["warnings"])
 
     def test_generated_complaint_recognizes_document_and_submission_language(
         self,

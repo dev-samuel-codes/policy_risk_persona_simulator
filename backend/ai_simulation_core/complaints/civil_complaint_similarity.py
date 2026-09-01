@@ -69,6 +69,10 @@ COMMON_WARNINGS = [
     "공개 FAQ의 유사 사례일 뿐 동일한 자격 판정이나 처리 결과를 보장하지 않습니다.",
     "검색 신뢰도는 최대 medium이며 시민 여론이나 민원 발생률 예측으로 사용할 수 없습니다.",
 ]
+LEXICAL_FALLBACK_WARNING = (
+    "양쪽에서 공통 핵심 분야를 확인하지 못해 문구 겹침을 보조 기준으로 사용한 "
+    "낮은 신뢰도 결과입니다."
+)
 
 TOKEN_PATTERN = re.compile(r"[0-9]+(?:[.,][0-9]+)*|[가-힣A-Za-z]{2,}")
 STOP_WORDS = {
@@ -109,6 +113,9 @@ DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
         "일자리",
         "구직",
         "직업",
+        "직업훈련",
+        "내일배움카드",
+        "채용",
         "진로",
         "창업",
         "근로",
@@ -136,9 +143,13 @@ DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
         "건강",
         "의료",
         "병원",
+        "보건소",
         "진료",
         "치료",
         "질병",
+        "결핵",
+        "치매",
+        "금연클리닉",
         "예방접종",
         "health",
         "medical",
@@ -165,6 +176,12 @@ DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
         "어업",
         "축산",
         "임업",
+        "산림",
+        "산지전용",
+        "산지관리",
+        "수산물",
+        "낚시",
+        "어선",
         "귀농",
         "귀어",
         "agriculture",
@@ -205,6 +222,7 @@ DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
         "과세",
         "납세",
         "지방세",
+        "주민세",
         "소득세",
         "재산세",
         "tax",
@@ -250,6 +268,123 @@ DOMAIN_PATTERNS: dict[str, tuple[str, ...]] = {
         "passport",
         "administrative",
     ),
+    "communications": (
+        "휴대전화",
+        "휴대폰",
+        "이동통신",
+        "통신요금",
+        "전화요금",
+        "알뜰폰",
+        "유심",
+        "번호이동",
+        "전기통신",
+        "telecommunication",
+        "mobile phone",
+    ),
+    "security_crime": (
+        "경찰",
+        "범죄",
+        "수사기관",
+        "형사사건",
+        "절도",
+        "폭행",
+        "성범죄",
+        "스토킹",
+        "고소장",
+        "피의자",
+        "police",
+        "crime",
+        "criminal",
+    ),
+    "disaster_safety": (
+        "재난",
+        "화재",
+        "소방",
+        "산불",
+        "지진",
+        "홍수",
+        "침수",
+        "대피소",
+        "구급",
+        "구조대",
+        "disaster",
+        "wildfire",
+        "earthquake",
+        "flood",
+        "firefighter",
+    ),
+    "consumer_protection": (
+        "소비자",
+        "환불",
+        "청약철회",
+        "리콜",
+        "분쟁조정",
+        "피해구제",
+        "전자상거래",
+        "불공정약관",
+        "consumer",
+        "refund",
+        "recall",
+    ),
+    "immigration": (
+        "출입국",
+        "외국인",
+        "체류자격",
+        "체류기간",
+        "입국 비자",
+        "취업비자",
+        "유학비자",
+        "비자 발급",
+        "비자 연장",
+        "귀화",
+        "국적취득",
+        "결혼이민",
+        "immigration",
+        "foreigner",
+        "visa",
+        "naturalization",
+    ),
+    "defense_veterans": (
+        "군인",
+        "군 장병",
+        "장병 내일준비적금",
+        "군복무",
+        "병역",
+        "입영",
+        "예비군",
+        "사회복무요원",
+        "보훈",
+        "국가유공자",
+        "제대군인",
+        "전역자",
+        "현역병",
+        "military",
+        "veteran",
+    ),
+    "animal_welfare": (
+        "반려동물",
+        "유기동물",
+        "동물등록",
+        "동물보호소",
+        "동물학대",
+        "개물림",
+        "맹견",
+        "pet care",
+        "animal welfare",
+    ),
+    "privacy_digital_rights": (
+        "개인정보",
+        "정보유출",
+        "명의도용",
+        "해킹",
+        "사이버범죄",
+        "디지털성범죄",
+        "정보보호",
+        "privacy",
+        "personal data",
+        "data breach",
+        "identity theft",
+    ),
 }
 
 DOMAIN_LABELS = {
@@ -265,6 +400,14 @@ DOMAIN_LABELS = {
     "environment": "환경",
     "culture_sports": "문화·체육",
     "legal_administration": "행정·증명",
+    "communications": "통신·휴대전화",
+    "security_crime": "치안·범죄",
+    "disaster_safety": "재난·안전",
+    "consumer_protection": "소비자 보호",
+    "immigration": "이민·외국인",
+    "defense_veterans": "국방·보훈",
+    "animal_welfare": "동물복지",
+    "privacy_digital_rights": "개인정보·디지털 권리",
 }
 
 ISSUE_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -1581,6 +1724,12 @@ class CivilComplaintSimilarityService:
                         context=context,
                         final=final,
                     )
+                    used_lexical_fallback = (
+                        topic_evidence["basis"] == "lexical_fallback"
+                    )
+                    result_warnings = list(COMMON_WARNINGS)
+                    if used_lexical_fallback:
+                        result_warnings.append(LEXICAL_FALLBACK_WARNING)
                     result = {
                         "case_id": record["case_id"],
                         "title": record["title"],
@@ -1592,13 +1741,17 @@ class CivilComplaintSimilarityService:
                         "reference_eligible": True,
                         "match_score": score_payload["final"],
                         "component_scores": score_payload,
-                        "confidence": "medium" if final >= 0.78 else "low",
+                        "confidence": (
+                            "low"
+                            if used_lexical_fallback
+                            else "medium" if final >= 0.78 else "low"
+                        ),
                         "match_reasons": _text_similarity_match_reasons(
                             complaint_dense,
                             topic_evidence,
                         ),
                         "evidence": evidence,
-                        "warnings": list(COMMON_WARNINGS),
+                        "warnings": result_warnings,
                     }
                     ranked.append((complaint_dense, lexical, case_id, result))
 
