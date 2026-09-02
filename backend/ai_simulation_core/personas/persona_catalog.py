@@ -20,9 +20,11 @@ from backend.ai_simulation_core.personas.persona_downloader import (
     get_local_parquet_files,
 )
 from backend.ai_simulation_core.personas.persona_sampler import PERSONA_COLUMNS
+from backend.ai_simulation_core.region_matching import region_matches
 
 RegionScope = Literal["nationwide", "specific"]
 AgeCohort = Literal["eligible", "boundary"]
+SelectionCohort = Literal["eligible", "boundary", "region_boundary"]
 
 REQUIRED_DISPLAY_COLUMNS = [
     "uuid",
@@ -160,20 +162,6 @@ def _validate_filter(
         )
 
 
-def region_matches(
-    persona: dict,
-    *,
-    region_scope: RegionScope,
-    province: str = "",
-    district: str = "",
-) -> bool:
-    if region_scope == "nationwide":
-        return True
-    if _clean_text(persona.get("province")) != province:
-        return False
-    return not district or _clean_text(persona.get("district")) == district
-
-
 def classify_age(
     age: Any,
     *,
@@ -214,10 +202,16 @@ def persona_selection_match(
         district=district,
     )
     cohort, reason = classify_age(persona.get("age"), age_min=age_min, age_max=age_max)
+    selection_cohort: SelectionCohort | None = None
+    if matches_region and cohort in {"eligible", "boundary"}:
+        selection_cohort = cohort
+    elif region_scope == "specific" and cohort == "eligible":
+        selection_cohort = "region_boundary"
     return {
         "region_match": matches_region,
         "age_cohort": cohort,
         "age_match_reason": reason,
+        "selection_cohort": selection_cohort,
     }
 
 
@@ -236,7 +230,7 @@ def _candidate_matches(
     district: str,
     age_min: int | None,
     age_max: int | None,
-    cohort: AgeCohort,
+    cohort: SelectionCohort,
 ) -> dict[str, Any] | None:
     occupation = _clean_text(persona.get("occupation"))
     if not occupation or PUBLIC_SERVANT_KEYWORD in occupation:
@@ -250,7 +244,7 @@ def _candidate_matches(
         age_min=age_min,
         age_max=age_max,
     )
-    if not match["region_match"] or match["age_cohort"] != cohort:
+    if match["selection_cohort"] != cohort:
         return None
     return match
 
@@ -262,7 +256,7 @@ def get_persona_candidates(
     district: str = "",
     age_min: int | None = None,
     age_max: int | None = None,
-    cohort: AgeCohort = "eligible",
+    cohort: SelectionCohort = "eligible",
     limit: int = 12,
     seed: int = 0,
     auto_download: bool = True,
@@ -276,12 +270,16 @@ def get_persona_candidates(
         age_min=age_min,
         age_max=age_max,
     )
-    if cohort not in {"eligible", "boundary"}:
-        raise ValueError("cohort는 eligible 또는 boundary이어야 합니다.")
+    if cohort not in {"eligible", "boundary", "region_boundary"}:
+        raise ValueError(
+            "cohort는 eligible, boundary 또는 region_boundary이어야 합니다."
+        )
     if not 1 <= limit <= 24:
         raise ValueError("limit은 1 이상 24 이하여야 합니다.")
     if cohort == "boundary" and age_min is None and age_max is None:
         return []
+    if cohort == "region_boundary" and region_scope != "specific":
+        raise ValueError("지역 경계선 후보는 특정 지역 조회에서만 선택할 수 있습니다.")
 
     parquet_files = get_local_parquet_files(auto_download=auto_download)
     if not parquet_files:
@@ -442,6 +440,7 @@ def validate_persona_selection(
     district: str = "",
     age_min: int | None = None,
     age_max: int | None = None,
+    selection_cohorts: Sequence[SelectionCohort] | None = None,
 ) -> list[dict[str, Any]]:
     province = province.strip()
     district = district.strip()
@@ -452,9 +451,19 @@ def validate_persona_selection(
         age_min=age_min,
         age_max=age_max,
     )
+    expected_cohorts = (
+        list(selection_cohorts) if selection_cohorts is not None else None
+    )
+    if expected_cohorts is not None and len(expected_cohorts) != len(personas):
+        raise ValueError("페르소나 ID와 후보 유형 수가 일치해야 합니다.")
+    if expected_cohorts is not None and any(
+        cohort not in {"eligible", "boundary", "region_boundary"}
+        for cohort in expected_cohorts
+    ):
+        raise ValueError("지원하지 않는 페르소나 후보 유형입니다.")
 
     evidence: list[dict[str, Any]] = []
-    for persona in personas:
+    for index, persona in enumerate(personas):
         persona_id = _clean_text(persona.get("uuid"))
         occupation = _clean_text(persona.get("occupation"))
         if not occupation:
@@ -472,7 +481,17 @@ def validate_persona_selection(
             age_min=age_min,
             age_max=age_max,
         )
-        if not match["region_match"]:
+        expected_cohort = (
+            expected_cohorts[index] if expected_cohorts is not None else None
+        )
+        if (
+            expected_cohort is not None
+            and match["selection_cohort"] != expected_cohort
+        ):
+            raise ValueError(
+                f"선택한 후보 유형과 페르소나 조건이 일치하지 않습니다: {persona_id}"
+            )
+        if expected_cohort is None and not match["region_match"]:
             raise ValueError(f"정책 적용 지역과 다른 페르소나입니다: {persona_id}")
         if match["age_cohort"] is None:
             raise ValueError(

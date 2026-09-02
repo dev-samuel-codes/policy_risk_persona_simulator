@@ -117,6 +117,7 @@ class SimulationApiTest(unittest.TestCase):
                     "region_match": True,
                     "age_cohort": "eligible",
                     "age_match_reason": "within_range",
+                    "selection_cohort": "eligible",
                 },
             }
             for index in range(3)
@@ -368,18 +369,21 @@ class SimulationApiTest(unittest.TestCase):
                 "region_match": True,
                 "age_cohort": "eligible",
                 "age_match_reason": "within_range",
+                "selection_cohort": "eligible",
             },
             {
                 "persona_id": "lower-boundary",
                 "region_match": True,
                 "age_cohort": "boundary",
                 "age_match_reason": "below_minimum",
+                "selection_cohort": "boundary",
             },
             {
                 "persona_id": "upper-boundary",
                 "region_match": True,
                 "age_cohort": "boundary",
                 "age_match_reason": "above_maximum",
+                "selection_cohort": "boundary",
             },
         ]
 
@@ -412,6 +416,7 @@ class SimulationApiTest(unittest.TestCase):
             district="서울-서초구",
             age_min=19,
             age_max=34,
+            selection_cohorts=None,
         )
         submitted_function, submitted_job_id, submitted_policy, submitted_personas = (
             submit.call_args.args
@@ -479,6 +484,7 @@ class SimulationApiTest(unittest.TestCase):
                     "region_match": True,
                     "age_cohort": "eligible",
                     "age_match_reason": "within_range",
+                    "selection_cohort": "eligible",
                 },
             }
             for index in range(3)
@@ -538,6 +544,7 @@ class SimulationApiTest(unittest.TestCase):
             district="서울-서초구",
             age_min=19,
             age_max=34,
+            selection_cohorts=["eligible"] * 3,
         )
         submitted_personas = submit.call_args.args[3]
         self.assertEqual(submitted_personas, personas)
@@ -602,6 +609,7 @@ class SimulationApiTest(unittest.TestCase):
                 "region_match": True,
                 "age_cohort": "eligible",
                 "age_match_reason": "no_age_restriction",
+                "selection_cohort": "eligible",
             }
             for persona in personas
         ]

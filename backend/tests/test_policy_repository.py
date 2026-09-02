@@ -11,6 +11,7 @@ class DirectPolicyRepositoryTest(unittest.TestCase):
         self.fields = {
             "policy_name": "청년 주거 지원",
             "target_audience": "만 19세 이상 34세 이하 청년",
+            "selection_criteria": "중위소득과 주거 여건을 심사",
             "application_period": "2026.08.01 ~ 2026.08.31",
             "effective_date": "2026-09-01",
             "required_documents": "신청서, 주민등록등본",
@@ -26,7 +27,20 @@ class DirectPolicyRepositoryTest(unittest.TestCase):
         self.assertEqual(policy["입력출처"], "직접입력")
         self.assertEqual(policy["상세정보"]["서비스명"], "청년 주거 지원")
         self.assertEqual(policy["상세정보"]["지원내용"], "월 20만 원 지원")
-        self.assertEqual(policy["상세정보"]["선정기준"], "기존 수혜자 제외")
+        self.assertEqual(
+            policy["상세정보"]["선정기준"],
+            "중위소득과 주거 여건을 심사",
+        )
+        self.assertEqual(policy["상세정보"]["제외조건"], "기존 수혜자 제외")
+
+    def test_missing_selection_criteria_is_not_filled_from_exclusion(self) -> None:
+        fields = {**self.fields}
+        fields.pop("selection_criteria")
+
+        policy = policy_repository.build_direct_policy(fields)
+
+        self.assertEqual(policy["상세정보"]["선정기준"], "")
+        self.assertEqual(policy["상세정보"]["제외조건"], "기존 수혜자 제외")
 
     def test_policy_name_and_benefits_are_required(self) -> None:
         with self.assertRaisesRegex(ValueError, "정책명"):

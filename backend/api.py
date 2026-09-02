@@ -263,6 +263,7 @@ def run_simulation_job(
 class DirectPolicyInput(BaseModel):
     policy_name: str
     target_audience: str = ""
+    selection_criteria: str = ""
     application_period: str = ""
     effective_date: str = ""
     required_documents: str = ""
@@ -280,6 +281,7 @@ class DirectPolicyInput(BaseModel):
     @field_validator(
         "policy_name",
         "target_audience",
+        "selection_criteria",
         "application_period",
         "effective_date",
         "required_documents",
@@ -325,6 +327,9 @@ class PersonaSimulationInput(BaseModel):
     policy: DirectPolicyInput
     selection_mode: Literal["manual", "random"] = "manual"
     persona_ids: list[str] = Field(default_factory=list, max_length=3)
+    selection_cohorts: list[
+        Literal["eligible", "boundary", "region_boundary"]
+    ] = Field(default_factory=list, max_length=3)
 
     @field_validator("persona_ids")
     @classmethod
@@ -340,9 +345,19 @@ class PersonaSimulationInput(BaseModel):
     def validate_selection_mode(self) -> "PersonaSimulationInput":
         if self.selection_mode == "manual" and len(self.persona_ids) != 3:
             raise ValueError("수동 선택에서는 서로 다른 페르소나 3명이 필요합니다.")
+        if (
+            self.selection_mode == "manual"
+            and self.selection_cohorts
+            and len(self.selection_cohorts) != len(self.persona_ids)
+        ):
+            raise ValueError("페르소나 ID와 후보 유형 수가 일치해야 합니다.")
         if self.selection_mode == "random" and self.persona_ids:
             raise ValueError(
                 "무작위 선택에서는 persona_ids를 함께 지정할 수 없습니다."
+            )
+        if self.selection_mode == "random" and self.selection_cohorts:
+            raise ValueError(
+                "무작위 선택에서는 selection_cohorts를 함께 지정할 수 없습니다."
             )
         return self
 
@@ -411,7 +426,9 @@ def get_persona_candidate_options(
     district: str = Query(default=""),
     age_min: int | None = Query(default=None, ge=0, le=120),
     age_max: int | None = Query(default=None, ge=0, le=120),
-    cohort: Literal["eligible", "boundary"] = Query(default="eligible"),
+    cohort: Literal["eligible", "boundary", "region_boundary"] = Query(
+        default="eligible"
+    ),
     limit: int = Query(default=12, ge=1, le=24),
     seed: int = Query(default=0),
 ) -> dict:
@@ -528,6 +545,11 @@ def create_persona_simulation(payload: PersonaSimulationInput) -> dict:
         else:
             citizen_personas = resolve_personas(payload.persona_ids)
 
+        requested_selection_cohorts = (
+            ["eligible"] * len(citizen_personas)
+            if payload.selection_mode == "random"
+            else list(payload.selection_cohorts) or None
+        )
         selection_match = validate_persona_selection(
             citizen_personas,
             region_scope=payload.policy.region_scope,
@@ -535,14 +557,8 @@ def create_persona_simulation(payload: PersonaSimulationInput) -> dict:
             district=payload.policy.region_district,
             age_min=payload.policy.age_min,
             age_max=payload.policy.age_max,
+            selection_cohorts=requested_selection_cohorts,
         )
-        if payload.selection_mode == "random" and any(
-            match["age_cohort"] != "eligible" for match in selection_match
-        ):
-            raise ValueError(
-                "무작위 선택 결과에 정책 나이 범위를 벗어난 페르소나가 "
-                "포함되었습니다."
-            )
     except FileNotFoundError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except ValueError as error:
@@ -555,7 +571,7 @@ def create_persona_simulation(payload: PersonaSimulationInput) -> dict:
     selected_personas = [
         {
             **persona,
-            "selection_cohort": match["age_cohort"],
+            "selection_cohort": match["selection_cohort"],
             "selection_match": match,
         }
         for persona, match in zip(
@@ -564,6 +580,7 @@ def create_persona_simulation(payload: PersonaSimulationInput) -> dict:
             strict=True,
         )
     ]
+    selected_cohorts = [match["selection_cohort"] for match in selection_match]
     selected_persona_ids = [str(persona["uuid"]) for persona in citizen_personas]
 
     job_id = str(uuid4())
@@ -578,6 +595,7 @@ def create_persona_simulation(payload: PersonaSimulationInput) -> dict:
             "selection_mode": payload.selection_mode,
             "selection_seed": selection_seed,
             "persona_ids": selected_persona_ids,
+            "selection_cohorts": selected_cohorts,
             "selected_personas": selected_personas,
             "selection_match": selection_match,
             "similar_policies": similar_policies,
@@ -601,6 +619,7 @@ def create_persona_simulation(payload: PersonaSimulationInput) -> dict:
         "selection_mode": payload.selection_mode,
         "selection_seed": selection_seed,
         "persona_ids": selected_persona_ids,
+        "selection_cohorts": selected_cohorts,
         "selected_personas": selected_personas,
         "selection_match": selection_match,
         "similar_policies": similar_policies,

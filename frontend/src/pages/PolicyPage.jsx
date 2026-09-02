@@ -115,6 +115,16 @@ function DirectPolicyForm({
             />
           </div>
 
+          <div className="col-span-2">
+            <PolicyField
+              label="선정기준"
+              name="selection_criteria"
+              placeholder="대상자 선정·우선순위·심사 기준을 입력하세요."
+              defaultValue={values.selection_criteria}
+              rows={3}
+            />
+          </div>
+
           <PolicyField
             label="신청기간"
             name="application_period"
@@ -283,12 +293,13 @@ function PolicySummaryCard({ policy }) {
   const policyName = detail.서비스명 ?? list.서비스명 ?? "입력한 정책";
   const policyDetails = [
     ["지원 대상", detail.지원대상 ?? list.지원대상],
+    ["선정 기준", detail.선정기준],
     ["지원 내용", detail.지원내용 ?? list.지원내용],
     ["신청 기간", detail.신청기한 ?? list.신청기한],
     ["시행일", detail.시행일],
     ["제출 서류", detail.구비서류],
     ["신청 방법", detail.신청방법 ?? list.신청방법],
-    ["제외 조건", detail.제외조건 ?? detail.선정기준],
+    ["제외 조건", detail.제외조건],
     ["문의처", detail.문의처 ?? list.전화문의],
   ].filter(([, value]) => typeof value === "string" && value.trim());
 

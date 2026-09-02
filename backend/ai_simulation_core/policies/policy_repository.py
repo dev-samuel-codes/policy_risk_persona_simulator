@@ -69,6 +69,7 @@ def build_direct_policy(fields: Mapping[str, Any]) -> dict:
     text_fields = {
         "policy_name",
         "target_audience",
+        "selection_criteria",
         "application_period",
         "effective_date",
         "required_documents",
@@ -126,7 +127,7 @@ def build_direct_policy(fields: Mapping[str, Any]) -> dict:
         "문의처": normalized.get("contact", ""),
         "지원내용": benefits,
         "제외조건": exclusion_conditions,
-        "선정기준": exclusion_conditions,
+        "선정기준": normalized.get("selection_criteria", ""),
     }
 
     return {

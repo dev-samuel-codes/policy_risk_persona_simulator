@@ -76,6 +76,13 @@ function formatAgeMatchReason(reason, ageMin, ageMax) {
   return "연령 조건 확인";
 }
 
+function formatCohortLabel(candidate) {
+  const selectionCohort = candidate.match.selection_cohort;
+  if (selectionCohort === "region_boundary") return "지역 경계선";
+  if (selectionCohort === "boundary") return "연령 경계선";
+  return "정책 해당";
+}
+
 function CandidateCard({
   candidate,
   isSelected,
@@ -92,8 +99,7 @@ function CandidateCard({
     ageMin,
     ageMax,
   );
-  const cohortLabel =
-    candidate.match?.age_cohort === "boundary" ? "연령 경계선" : "정책 해당";
+  const cohortLabel = formatCohortLabel(candidate);
 
   return (
     <button
@@ -194,6 +200,7 @@ export default function PersonaSelectionStep({
   const isLoadingCandidates = candidateState === "loading";
   const isSubmitting = submissionState === "submitting";
   const selectedIds = [...selectedPersonas.keys()];
+  const selectedCandidates = [...selectedPersonas.values()];
   const hasThreeSelections = selectedIds.length === MAX_SELECTED_PERSONAS;
 
   useEffect(() => {
@@ -233,7 +240,11 @@ export default function PersonaSelectionStep({
   }, []);
 
   useEffect(() => {
-    if (!filtersAreValid || (cohort === "boundary" && !hasAgeCondition)) {
+    if (
+      !filtersAreValid ||
+      (cohort === "boundary" && !hasAgeCondition) ||
+      (cohort === "region_boundary" && regionScope !== "specific")
+    ) {
       setCandidates([]);
       setCandidateState("idle");
       setCandidateError("");
@@ -314,6 +325,9 @@ export default function PersonaSelectionStep({
     setRegionScope(nextScope);
     setProvince("");
     setDistrict("");
+    if (nextScope === "nationwide" && cohort === "region_boundary") {
+      setCohort("eligible");
+    }
     clearSelectionForFilterChange();
   };
 
@@ -347,7 +361,11 @@ export default function PersonaSelectionStep({
   };
 
   const changeCohort = (nextCohort) => {
-    if (nextCohort === cohort || (nextCohort === "boundary" && !hasAgeCondition)) {
+    if (
+      nextCohort === cohort ||
+      (nextCohort === "boundary" && !hasAgeCondition) ||
+      (nextCohort === "region_boundary" && regionScope !== "specific")
+    ) {
       return;
     }
     setCohort(nextCohort);
@@ -411,7 +429,14 @@ export default function PersonaSelectionStep({
     const requestBody = {
       policy,
       selection_mode: selectionMode,
-      ...(isRandomSelection ? {} : { persona_ids: selectedIds }),
+      ...(isRandomSelection
+        ? {}
+        : {
+            persona_ids: selectedIds,
+            selection_cohorts: selectedCandidates.map(
+              (candidate) => candidate.match.selection_cohort,
+            ),
+          }),
     };
     const fallbackMessage = isRandomSelection
       ? "범위에 맞는 무작위 페르소나로 분석을 시작하지 못했습니다."
@@ -601,8 +626,19 @@ export default function PersonaSelectionStep({
           )}
           {regionScope === "specific" && province && (
             <p className="mt-5 rounded-[13px] bg-brand-soft/75 px-4 py-3 text-[13px] leading-5 text-brand">
-              선택한 {province}
-              {district ? ` ${displayDistrict(district, province)}` : " 전체"} 거주 페르소나만 후보에 표시됩니다.
+              {cohort === "region_boundary" ? (
+                <>
+                  선택한 {province}
+                  {district ? ` ${displayDistrict(district, province)}` : " 전체"} 밖에
+                  거주하면서 나이 조건을 충족하는 페르소나를 표시합니다.
+                </>
+              ) : (
+                <>
+                  선택한 {province}
+                  {district ? ` ${displayDistrict(district, province)}` : " 전체"} 거주
+                  페르소나만 후보에 표시됩니다.
+                </>
+              )}
             </p>
           )}
         </section>
@@ -614,7 +650,7 @@ export default function PersonaSelectionStep({
                 페르소나 후보
               </h2>
               <p className="mt-1 text-[13px] text-slate">
-                경계선 후보는 입력한 최소·최대 나이의 바로 바깥 연령을 보여줍니다.
+                연령 경계선은 나이 범위 바로 바깥을, 지역 경계선은 정책 지역 밖의 나이 적격자를 보여줍니다.
               </p>
             </div>
             <button
@@ -633,7 +669,7 @@ export default function PersonaSelectionStep({
             </button>
           </div>
 
-          <div className="mt-5 flex w-full max-w-[420px] rounded-[13px] bg-[#e9ecf0] p-1" role="group" aria-label="페르소나 후보 유형">
+          <div className="mt-5 flex w-full max-w-[620px] rounded-[13px] bg-[#e9ecf0] p-1" role="group" aria-label="페르소나 후보 유형">
             <button
               type="button"
               aria-pressed={cohort === "eligible"}
@@ -660,13 +696,26 @@ export default function PersonaSelectionStep({
             >
               연령 경계선
             </button>
+            <button
+              type="button"
+              aria-pressed={cohort === "region_boundary"}
+              disabled={isSubmitting || regionScope !== "specific"}
+              onClick={() => changeCohort("region_boundary")}
+              className={`flex-1 rounded-[10px] px-4 py-2.5 text-[14px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
+                cohort === "region_boundary"
+                  ? "bg-white text-brand shadow-sm"
+                  : "text-slate hover:text-ink"
+              }`}
+            >
+              지역 경계선
+            </button>
           </div>
 
           {!hasRequiredRegion ? (
             <div className="mt-5 rounded-[18px] border border-dashed border-[#cfd6df] bg-white px-6 py-12 text-center">
               <p className="text-[15px] font-semibold text-ink">정책 적용 지역을 선택해 주세요.</p>
               <p className="mt-2 text-[13px] text-slate">
-                특정 지역을 선택하면 다른 지역의 페르소나는 후보에 포함되지 않습니다.
+                정책 해당·연령 경계선은 같은 지역에서, 지역 경계선은 정책 지역 밖에서 찾습니다.
               </p>
             </div>
           ) : isLoadingCandidates ? (
@@ -723,7 +772,7 @@ export default function PersonaSelectionStep({
             <p className="text-[15px] font-bold text-ink">{selectionStatus}</p>
             <p className="mt-0.5 hidden max-w-[510px] text-[12px] leading-5 text-slate sm:block">
               직접 선택하지 않아도 현재 지역·나이의 정책 해당 범위에서 서버가 서로 다른 3명을 무작위로 선택합니다.
-              연령 경계선 페르소나는 직접 선택할 때만 포함됩니다.
+              연령·지역 경계선 페르소나는 직접 선택할 때만 포함됩니다.
             </p>
             {selectedPersonas.size > 0 && (
               <ul className="mt-2 flex flex-wrap gap-2" aria-label="선택한 페르소나">
@@ -737,7 +786,7 @@ export default function PersonaSelectionStep({
                       className="rounded-pill bg-brand-soft px-2.5 py-1 text-[11px] font-semibold text-brand transition hover:bg-[#dce5ee] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {candidate.occupation || "직업 정보 없음"} · {candidate.age ?? "나이 미상"}
-                      {candidate.age !== null && candidate.age !== undefined ? "세" : ""} · {candidate.match?.age_cohort === "boundary" ? "연령 경계선" : "정책 해당"}
+                      {candidate.age !== null && candidate.age !== undefined ? "세" : ""} · {formatCohortLabel(candidate)}
                       <span className="ml-1.5" aria-hidden="true">×</span>
                     </button>
                   </li>

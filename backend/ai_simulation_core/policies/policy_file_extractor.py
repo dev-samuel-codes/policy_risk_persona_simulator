@@ -28,6 +28,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".hwpx", ".txt", ".md"}
 POLICY_FIELD_KEYS = (
     "policy_name",
     "target_audience",
+    "selection_criteria",
     "application_period",
     "effective_date",
     "required_documents",
@@ -40,6 +41,7 @@ POLICY_FIELD_KEYS = (
 FIELD_LABELS = {
     "policy_name": "정책명",
     "target_audience": "지원대상",
+    "selection_criteria": "선정기준",
     "application_period": "신청기간",
     "effective_date": "시행일",
     "required_documents": "제출서류",

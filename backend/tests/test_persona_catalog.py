@@ -81,6 +81,39 @@ class PersonaCatalogTest(unittest.TestCase):
                 "family_persona": "2인 가구",
             },
             {
+                "uuid": "busan-boundary-low",
+                "occupation": "학생",
+                "sex": "여성",
+                "age": 18,
+                "province": "부산",
+                "district": "부산-해운대구",
+                "persona": "부산 거주 학생",
+                "professional_persona": "학생",
+                "family_persona": "부모 동거",
+            },
+            {
+                "uuid": "busan-boundary-high",
+                "occupation": "디자이너",
+                "sex": "남성",
+                "age": 35,
+                "province": "부산",
+                "district": "부산-해운대구",
+                "persona": "부산 거주 디자이너",
+                "professional_persona": "디자이너",
+                "family_persona": "1인 가구",
+            },
+            {
+                "uuid": "busan-outside-age",
+                "occupation": "회계사",
+                "sex": "여성",
+                "age": 52,
+                "province": "부산",
+                "district": "부산-해운대구",
+                "persona": "부산 거주 회계사",
+                "professional_persona": "회계사",
+                "family_persona": "4인 가구",
+            },
+            {
                 "uuid": "seoul-official",
                 "occupation": "지방 공무원",
                 "sex": "남성",
@@ -126,6 +159,85 @@ class PersonaCatalogTest(unittest.TestCase):
             },
         )
 
+    def test_region_matches_normalizes_only_verified_province_prefixes(self) -> None:
+        persona = {
+            "province": "서울",
+            "district": "서울-서초구",
+        }
+
+        self.assertTrue(
+            persona_catalog.region_matches(
+                persona,
+                region_scope="specific",
+                province="서울",
+                district="서초구",
+            )
+        )
+        self.assertTrue(
+            persona_catalog.region_matches(
+                {**persona, "district": "서초구"},
+                region_scope="specific",
+                province="서울",
+                district="서울-서초구",
+            )
+        )
+        self.assertFalse(
+            persona_catalog.region_matches(
+                persona,
+                region_scope="specific",
+                province="서울",
+                district="강남구",
+            )
+        )
+        self.assertFalse(
+            persona_catalog.region_matches(
+                {"province": "서울", "district": "서울-강서구"},
+                region_scope="specific",
+                province="서울",
+                district="서구",
+            )
+        )
+        self.assertFalse(
+            persona_catalog.region_matches(
+                {"province": "부산", "district": "부산-중구"},
+                region_scope="specific",
+                province="서울",
+                district="서울-중구",
+            )
+        )
+        self.assertFalse(
+            persona_catalog.region_matches(
+                {"province": "서울", "district": ""},
+                region_scope="specific",
+                province="서울",
+                district="서초구",
+            )
+        )
+        self.assertTrue(
+            persona_catalog.region_matches(
+                persona,
+                region_scope="specific",
+                province="서울",
+            )
+        )
+        for province, short_district in (
+            ("부산", "부산진구"),
+            ("세종", "세종시"),
+            ("제주", "제주시"),
+        ):
+            with self.subTest(province=province, district=short_district):
+                self.assertTrue(
+                    persona_catalog.region_matches(
+                        {
+                            "province": province,
+                            "district": f"{province}-{short_district}",
+                        },
+                        region_scope="specific",
+                        province=province,
+                        district=short_district,
+                    )
+                )
+
     def test_eligible_candidates_apply_region_and_age_hard_filters(self) -> None:
         candidates = persona_catalog.get_persona_candidates(
             region_scope="specific",
@@ -152,7 +264,41 @@ class PersonaCatalogTest(unittest.TestCase):
                 for candidate in candidates
             )
         )
+        self.assertTrue(
+            all(
+                candidate["match"]["selection_cohort"] == "eligible"
+                for candidate in candidates
+            )
+        )
         self.assertTrue(all("persona" in candidate for candidate in candidates))
+
+    def test_region_boundary_is_other_region_and_age_eligible_only(self) -> None:
+        candidates = persona_catalog.get_persona_candidates(
+            region_scope="specific",
+            province="서울",
+            district="서울-서초구",
+            age_min=19,
+            age_max=34,
+            cohort="region_boundary",
+            limit=12,
+            seed=9,
+            auto_download=False,
+        )
+
+        self.assertEqual(
+            {candidate["uuid"] for candidate in candidates},
+            {"busan-eligible"},
+        )
+        self.assertTrue(
+            all(candidate["match"]["region_match"] is False for candidate in candidates)
+        )
+        self.assertTrue(
+            all(
+                candidate["match"]["age_cohort"] == "eligible"
+                and candidate["match"]["selection_cohort"] == "region_boundary"
+                for candidate in candidates
+            )
+        )
 
     def test_boundary_is_only_one_year_outside_and_never_falls_back(self) -> None:
         candidates = persona_catalog.get_persona_candidates(
@@ -173,6 +319,12 @@ class PersonaCatalogTest(unittest.TestCase):
         )
         self.assertNotIn("seoul-too-old", {item["uuid"] for item in candidates})
         self.assertNotIn("busan-eligible", {item["uuid"] for item in candidates})
+        self.assertTrue(
+            all(
+                candidate["match"]["selection_cohort"] == "boundary"
+                for candidate in candidates
+            )
+        )
 
         no_match = persona_catalog.get_persona_candidates(
             region_scope="specific",
@@ -194,6 +346,14 @@ class PersonaCatalogTest(unittest.TestCase):
             ),
             [],
         )
+
+    def test_region_boundary_rejects_nationwide_scope(self) -> None:
+        with self.assertRaisesRegex(ValueError, "특정 지역"):
+            persona_catalog.get_persona_candidates(
+                region_scope="nationwide",
+                cohort="region_boundary",
+                auto_download=False,
+            )
 
     def test_nationwide_filter_rejects_specific_region_fields(self) -> None:
         with self.assertRaisesRegex(ValueError, "특정 지역 조회"):
@@ -273,6 +433,62 @@ class PersonaCatalogTest(unittest.TestCase):
                         "district": "서울-서초구",
                     }
                 ],
+                **common,
+            )
+
+    def test_selection_allows_region_boundary_only_when_explicitly_enabled(self) -> None:
+        common = {
+            "region_scope": "specific",
+            "province": "서울",
+            "district": "서울-서초구",
+            "age_min": 19,
+            "age_max": 34,
+        }
+        evidence = persona_catalog.validate_persona_selection(
+            [
+                {
+                    "uuid": "other-region-eligible",
+                    "occupation": "교사",
+                    "age": 28,
+                    "province": "부산",
+                    "district": "부산-해운대구",
+                }
+            ],
+            selection_cohorts=["region_boundary"],
+            **common,
+        )
+
+        self.assertEqual(evidence[0]["selection_cohort"], "region_boundary")
+        self.assertFalse(evidence[0]["region_match"])
+        self.assertEqual(evidence[0]["age_cohort"], "eligible")
+
+        with self.assertRaisesRegex(ValueError, "후보 유형"):
+            persona_catalog.validate_persona_selection(
+                [
+                    {
+                        "uuid": "other-region-boundary",
+                        "occupation": "디자이너",
+                        "age": 35,
+                        "province": "부산",
+                        "district": "부산-해운대구",
+                    }
+                ],
+                selection_cohorts=["region_boundary"],
+                **common,
+            )
+
+        with self.assertRaisesRegex(ValueError, "후보 유형"):
+            persona_catalog.validate_persona_selection(
+                [
+                    {
+                        "uuid": "other-region-eligible",
+                        "occupation": "교사",
+                        "age": 28,
+                        "province": "부산",
+                        "district": "부산-해운대구",
+                    }
+                ],
+                selection_cohorts=["eligible"],
                 **common,
             )
 

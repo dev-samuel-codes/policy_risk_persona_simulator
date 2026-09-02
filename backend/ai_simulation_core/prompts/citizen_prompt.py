@@ -2,12 +2,15 @@
 
 import json
 import re
+from dataclasses import dataclass
 
 from backend.ai_simulation_core.simulations.citizen_quality import (
     MISSING_POLICY_VALUE,
+    NOT_MATCHED,
     build_grounding_facts,
     canonical_document_names,
     display_policy_value,
+    evaluate_region_status,
     persona_source_name,
 )
 
@@ -48,6 +51,19 @@ _LATIN_PERSONA_TERMS = {
     "VR": "가상현실",
     "AR": "증강현실",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class ComplaintFocus:
+    """민원 생성에 사용할 단일 쟁점과 그 선택 근거."""
+
+    kind: str
+    basis: str
+    priority: int
+    policy_evidence: str
+    persona_evidence: str
+    question_seed: str
+    instruction: str
 
 
 def _koreanize_persona_text(value: object) -> str:
@@ -153,75 +169,332 @@ def _policy_fact_text(policy: dict) -> str:
     )
 
 
-def _complaint_focus(persona: dict, policy: dict) -> tuple[str, str]:
+def _focus_seed(persona: dict) -> int:
+    seed_text = str(persona.get("uuid") or "")
+    return sum((index + 1) * ord(char) for index, char in enumerate(seed_text))
+
+
+def _select_priority_focus(
+    candidates: list[ComplaintFocus],
+    *,
+    seed: int,
+) -> ComplaintFocus:
+    highest_priority = max(candidate.priority for candidate in candidates)
+    highest = [
+        candidate
+        for candidate in candidates
+        if candidate.priority == highest_priority
+    ]
+    return highest[seed % len(highest)]
+
+
+def _age_boundary_focus(persona: dict, policy: dict) -> ComplaintFocus | None:
+    try:
+        age = int(persona.get("age"))
+    except (TypeError, ValueError):
+        return None
+
+    try:
+        age_min = (
+            int(policy["age_min"])
+            if policy.get("age_min") is not None
+            else None
+        )
+        age_max = (
+            int(policy["age_max"])
+            if policy.get("age_max") is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        return None
+
+    if age_min is not None and age == age_min - 1:
+        return ComplaintFocus(
+            kind="age_boundary",
+            basis="지원대상",
+            priority=100,
+            policy_evidence=f"연령 하한은 {age_min}세 이상",
+            persona_evidence=f"현재 {age}세로 하한보다 한 살 낮음",
+            question_seed=(
+                f"현재 {age}세로 {age_min}세 이상 기준보다 한 살 낮습니다. "
+                "한 살 차이를 두는 기준의 이유와 적용 방식을 설명해 주세요."
+            ),
+            instruction=(
+                "정책의 연령 하한과 페르소나 나이를 모두 직접 언급하고, "
+                "구조화 나이 조건을 충족하지 못한다는 사실과 한 살 차이의 "
+                "형평성·기준 설명 필요성만 제기. 실제 신청·탈락·승인 경험이나 "
+                "다른 자격 조건은 만들지 말 것"
+            ),
+        )
+    if age_max is not None and age == age_max + 1:
+        return ComplaintFocus(
+            kind="age_boundary",
+            basis="지원대상",
+            priority=100,
+            policy_evidence=f"연령 상한은 {age_max}세 이하",
+            persona_evidence=f"현재 {age}세로 상한보다 한 살 높음",
+            question_seed=(
+                f"현재 {age}세로 {age_max}세 이하 기준보다 한 살 높습니다. "
+                "한 살 차이를 두는 기준의 이유와 적용 방식을 설명해 주세요."
+            ),
+            instruction=(
+                "정책의 연령 상한과 페르소나 나이를 모두 직접 언급하고, "
+                "구조화 나이 조건을 충족하지 못한다는 사실과 한 살 차이의 "
+                "형평성·기준 설명 필요성만 제기. 실제 신청·탈락·승인 경험이나 "
+                "다른 자격 조건은 만들지 말 것"
+            ),
+        )
+    return None
+
+
+def _region_mismatch_focus(persona: dict, policy: dict) -> ComplaintFocus | None:
+    if evaluate_region_status(persona, policy) != NOT_MATCHED:
+        return None
+    policy_region = _policy_region_condition(policy)
+    persona_region = _persona_residence(persona) or "거주지 정보 없음"
+    return ComplaintFocus(
+        kind="region_mismatch",
+        basis="지원대상",
+        priority=95,
+        policy_evidence=f"정책 적용 지역은 {policy_region}",
+        persona_evidence=f"페르소나 거주지는 {persona_region}",
+        question_seed=(
+            f"현재 거주지는 {persona_region}이고 정책 적용 지역은 {policy_region}입니다. "
+            "지역 경계로 제외되는 기준과 대안이 있는지 설명해 주세요."
+        ),
+        instruction=(
+            "정책 적용 지역과 페르소나 거주지를 모두 직접 언급하고, 구조화 지역 "
+            "조건을 충족하지 못한다는 사실과 지역 경계 기준의 형평성·설명 "
+            "필요성만 제기. 실제 신청·탈락·승인 경험이나 다른 자격 조건은 "
+            "만들지 말 것"
+        ),
+    )
+
+
+def _eligibility_gap_focuses(detail: dict) -> list[ComplaintFocus]:
+    definitions = (
+        (
+            "지원대상",
+            "eligibility_gap",
+            80,
+            "별도 지원대상 항목이 비어 있으며 다른 정책 항목의 조건은 그대로 인정",
+            (
+                "별도 지원대상 안내가 없어 다른 항목에 적힌 조건 외 추가 대상 "
+                "기준은 확인하기 어렵습니다."
+            ),
+            (
+                "별도 지원대상 항목이 비어 있음을 지적하되, 다른 정책 항목과 구조화 "
+                "지역·나이 조건은 인정하고 그 외 추가 기준만 조건형으로 확인. 입력에 없는 "
+                "자격·소득·재산·주택·중복수급·승인 조건과 개인 상태를 만들거나 "
+                "충족 여부를 단정하지 말 것"
+            ),
+            False,
+        ),
+        (
+            "선정기준",
+            "selection_criteria_gap",
+            80,
+            "별도 선정기준 항목이 비어 있으며 다른 정책 항목의 내용은 그대로 인정",
+            (
+                "별도 선정기준 안내가 없어 다른 항목에 적힌 내용 외 세부 선정 "
+                "방식은 확인하기 어렵습니다."
+            ),
+            (
+                "별도 선정기준 항목이 비어 있음을 지적하되 다른 정책 항목의 선정 "
+                "관련 내용은 인정하고, 그 외 세부 방식만 확인 요청. "
+                "입력에 없는 자격·소득·재산·주택·중복수급·승인 조건과 개인 "
+                "상태를 만들거나 충족 여부를 단정하지 말 것"
+            ),
+            False,
+        ),
+        (
+            "제외조건",
+            "exclusion_gap",
+            80,
+            "별도 제외조건 항목이 비어 있으며 다른 정책 항목의 내용은 그대로 인정",
+            (
+                "별도 제외조건 안내가 없어 다른 항목에 적힌 내용 외 추가 제외 "
+                "기준은 확인하기 어렵습니다."
+            ),
+            (
+                "별도 제외조건 항목이 비어 있음을 지적하되 다른 정책 항목의 제외 "
+                "관련 내용은 인정하고, 그 외 추가 기준만 확인 요청. "
+                "입력에 없는 자격·소득·재산·주택·중복수급·승인 조건과 개인 "
+                "상태를 만들거나 충족 여부를 단정하지 말 것"
+            ),
+            True,
+        ),
+    )
+    return [
+        ComplaintFocus(
+            kind=kind,
+            basis=field,
+            priority=priority,
+            policy_evidence=evidence,
+            persona_evidence="개인 상태를 새로 가정하지 않음",
+            question_seed=question_seed,
+            instruction=instruction,
+        )
+        for (
+            field,
+            kind,
+            priority,
+            evidence,
+            question_seed,
+            instruction,
+            require_key,
+        ) in definitions
+        if (not require_key or field in detail)
+        and not str(detail.get(field) or "").strip()
+    ]
+
+
+def _missing_user_field_focuses(detail: dict) -> list[ComplaintFocus]:
+    user_fields = (
+        ("신청방법", "신청방법이", "신청방법을"),
+        ("신청기한", "신청기한이", "신청기한을"),
+        ("구비서류", "구비서류가", "구비서류를"),
+        ("문의처", "문의처가", "문의처를"),
+    )
+    return [
+        ComplaintFocus(
+            kind=f"missing_{field}",
+            basis="정보미제공",
+            priority=40,
+            policy_evidence=f"{field} 정보가 제공되지 않음",
+            persona_evidence="개인 사실을 추가할 필요 없음",
+            question_seed=(
+                f"{subject} 안내되지 않아 확인이 어렵습니다. "
+                f"{object_} 어디서 확인할 수 있는지 안내가 필요합니다."
+            ),
+            instruction=(
+                f"{field} 정보가 제공되지 않은 점만 지적. complaint_text와 "
+                "dialogue에서 나이·지역·지원 대상·자격·승인·제외 단어와 조건 "
+                f"충족 설명을 모두 쓰지 말 것. 안전한 형식: '{subject} "
+                f"안내되지 않아 확인이 어렵습니다. {object_} 어디서 확인할 수 "
+                "있는지 안내가 필요합니다.'"
+            ),
+        )
+        for field, subject, object_ in user_fields
+        if not str(detail.get(field) or "").strip()
+    ]
+
+
+def _safe_provided_focuses(detail: dict) -> list[ComplaintFocus]:
+    document_names = canonical_document_names(detail.get("구비서류"))
+    document_identity = ", ".join(document_names) or "정책에 제공된 구비서류"
+    application_method = display_policy_value(detail.get("신청방법"))
+    focuses = [
+        (
+            "지원내용",
+            ComplaintFocus(
+                kind="benefit_effectiveness",
+                basis="지원내용",
+                priority=10,
+                policy_evidence=(
+                    f"지원내용: {display_policy_value(detail.get('지원내용'))}"
+                ),
+                persona_evidence="페르소나의 일반적인 생활 부담만 사용",
+                question_seed=(
+                    "제공된 지원 규모가 현실적인 부담을 충분히 줄일 수 있는지 "
+                    "궁금합니다."
+                ),
+                instruction=(
+                    "정책 원문의 지원 금액·횟수·최대 기간을 그대로 보존하고 지원 "
+                    "규모의 실효성을 평가. 생활비·주거비 부담 같은 주관적 우려는 "
+                    "허용하되, 입력에 없는 배우자 병원비·자녀 양육비 같은 구체적인 "
+                    "제3자 사실은 만들지 말 것. 안전한 형식: '제공된 지원 규모가 "
+                    "현실적인 부담을 충분히 줄일 수 있는지 의문입니다.'"
+                ),
+            ),
+        ),
+        (
+            "신청방법",
+            ComplaintFocus(
+                kind="application_accessibility",
+                basis="신청방법",
+                priority=10,
+                policy_evidence=f"신청방법: {application_method}",
+                persona_evidence="제공된 신청방법에 대한 접근성만 평가",
+                question_seed=(
+                    "제공된 신청방법이 누구에게나 편리하고 접근 가능한지 "
+                    "궁금합니다."
+                ),
+                instruction="제공된 신청방법의 접근성과 편의성을 평가",
+            ),
+        ),
+        (
+            "신청기한",
+            ComplaintFocus(
+                kind="deadline_burden",
+                basis="신청기한",
+                priority=10,
+                policy_evidence=(
+                    f"신청기한: {display_policy_value(detail.get('신청기한'))}"
+                ),
+                persona_evidence="직장·가정·공부 맥락의 주관적 시간 부담만 사용",
+                question_seed="제공된 신청기간이 준비하기에 충분한지 궁금합니다.",
+                instruction=(
+                    "정책에 제공된 신청기간 자체가 준비하기에 충분한지만 평가. "
+                    "개인이 이미 준비했거나 준비를 시작하지 못했다는 현재 이력만 "
+                    "만들지 말 것. 직장·가정·공부 맥락의 주관적 시간 부담은 허용. "
+                    "안전한 형식: '제공된 신청기간이 준비하기에 충분한지 "
+                    "의문입니다.'"
+                ),
+            ),
+        ),
+        (
+            "구비서류",
+            ComplaintFocus(
+                kind="document_burden",
+                basis="구비서류",
+                priority=10,
+                policy_evidence=(
+                    f"구비서류: {display_policy_value(detail.get('구비서류'))}"
+                ),
+                persona_evidence="제공된 서류의 준비·발급·제출 부담만 평가",
+                question_seed=(
+                    "제공된 구비서류의 준비와 제출 절차를 더 구체적으로 "
+                    "안내해 주세요."
+                ),
+                instruction=(
+                    "제공된 구비서류 이름을 인정한 상태에서 "
+                    f"다음 항목을 모두 직접 언급: {document_identity}. "
+                    "준비·발급·제출 방식의 부담만 평가. "
+                    f"정책의 신청방법 값은 '{application_method}'임을 인정하고, "
+                    "이미 제공된 온라인·방문 채널의 이용 가능 여부를 모른다고 "
+                    "말하지 말 것. 정책 구비서류 값에 없는 구체적인 발급처·방문·"
+                    "온라인·제출 채널은 사실처럼 만들지 말고, 세부 안내가 "
+                    "필요하다는 질문으로만 표현. 서류 항목 자체가 없거나 어떤 "
+                    "서류인지 모른다고 말하지 말 것"
+                ),
+            ),
+        ),
+    ]
+    return [
+        focus
+        for field, focus in focuses
+        if str(detail.get(field) or "").strip()
+    ]
+
+
+def _complaint_focus(persona: dict, policy: dict) -> ComplaintFocus:
     detail = policy.get("상세정보")
     if not isinstance(detail, dict):
         detail = {}
 
-    user_fields = (
-        ("신청방법", "신청방법"),
-        ("신청기한", "신청기한"),
-        ("구비서류", "구비서류"),
-        ("문의처", "문의처"),
-    )
-    missing = [
-        label
-        for label, key in user_fields
-        if not str(detail.get(key) or "").strip()
-    ]
-    seed_text = str(persona.get("uuid") or "")
-    seed = sum((index + 1) * ord(char) for index, char in enumerate(seed_text))
-    if missing:
-        field = missing[seed % len(missing)]
-        subject, object_ = {
-            "신청방법": ("신청방법이", "신청방법을"),
-            "신청기한": ("신청기한이", "신청기한을"),
-            "구비서류": ("구비서류가", "구비서류를"),
-            "문의처": ("문의처가", "문의처를"),
-        }[field]
-        return (
-            "정보미제공",
-            f"{field} 정보가 제공되지 않은 점만 지적. "
-            "complaint_text와 dialogue에서 나이·지역·지원 대상·자격·승인·제외 "
-            "단어와 조건 충족 설명을 모두 쓰지 말 것. "
-            f"안전한 형식: '{subject} 안내되지 않아 확인이 어렵습니다. "
-            f"{object_} 어디서 확인할 수 있는지 안내가 필요합니다.'",
+    candidates = [
+        focus
+        for focus in (
+            _age_boundary_focus(persona, policy),
+            _region_mismatch_focus(persona, policy),
         )
-
-    document_names = canonical_document_names(detail.get("구비서류"))
-    document_identity = ", ".join(document_names) or "정책에 제공된 구비서류"
-    application_method = display_policy_value(detail.get("신청방법"))
-    safe_focuses = [
-        (
-            "지원내용",
-            "정책 원문의 지원 금액·횟수·최대 기간을 그대로 보존하고 지원 규모의 "
-            "실효성을 평가. 생활비·주거비 부담 같은 주관적 우려는 허용하되, 입력에 "
-            "없는 배우자 병원비·자녀 양육비 같은 구체적인 제3자 사실은 만들지 말 것. "
-            "안전한 형식: '제공된 지원 "
-            "규모가 현실적인 부담을 충분히 줄일 수 있는지 의문입니다.'",
-        ),
-        ("신청방법", "제공된 신청방법의 접근성과 편의성을 평가"),
-        (
-            "신청기한",
-            "정책에 제공된 신청기간 자체가 준비하기에 충분한지만 평가. 개인이 "
-            "이미 준비했거나 준비를 시작하지 못했다는 현재 이력만 만들지 말 것. "
-            "직장·가정·공부 맥락의 주관적 시간 부담은 허용. 안전한 형식: "
-            "'제공된 신청기간이 준비하기에 "
-            "충분한지 의문입니다.'",
-        ),
-        (
-            "구비서류",
-            "제공된 구비서류 이름을 인정한 상태에서 "
-            f"다음 항목을 모두 직접 언급: {document_identity}. "
-            "준비·발급·제출 방식의 부담만 평가. "
-            f"정책의 신청방법 값은 '{application_method}'임을 인정하고, 이미 제공된 "
-            "온라인·방문 채널의 이용 가능 여부를 모른다고 말하지 말 것. "
-            "정책 구비서류 값에 없는 구체적인 발급처·방문·온라인·제출 채널은 "
-            "사실처럼 만들지 말고, 세부 안내가 필요하다는 질문으로만 표현. "
-            "서류 항목 자체가 없거나 어떤 서류인지 모른다고 말하지 말 것",
-        ),
+        if focus is not None
     ]
-    return safe_focuses[seed % len(safe_focuses)]
+    candidates.extend(_eligibility_gap_focuses(detail))
+    candidates.extend(_missing_user_field_focuses(detail))
+    candidates.extend(_safe_provided_focuses(detail))
+    return _select_priority_focus(candidates, seed=_focus_seed(persona))
 
 
 def _feedback_instruction(error: str) -> str:
@@ -306,6 +579,13 @@ def _feedback_instruction(error: str) -> str:
         return "grounding 객체의 키와 값은 출력 계약에 채워진 값을 그대로 복사하세요."
     if error.startswith("COMPLAINT_BASIS_INVALID"):
         return "각 basis는 허용된 열 가지 값 중 실제 쟁점에 맞는 값 하나만 쓰세요."
+    if error.startswith("COMPLAINT_BASIS_MISMATCH"):
+        return "basis는 출력 계약에 미리 채워진 값을 그대로 복사하고 바꾸지 마세요."
+    if error.startswith("COMPLAINT_FOCUS_MISMATCH"):
+        return (
+            "이번 응답에 지정된 쟁점의 정책 근거와 페르소나 근거를 민원 두 문장에 "
+            "직접 반영하고, 같은 basis의 다른 쟁점으로 바꾸지 마세요."
+        )
     if error.startswith("DUPLICATE_COMPLAINT"):
         return "겹치는 민원을 삭제하거나 서로 다른 단일 쟁점으로 다시 작성하세요."
     return error
@@ -315,6 +595,7 @@ def citizen_prompt(
     persona: dict,
     policy: dict,
     validation_feedback: list[str] | None = None,
+    focus: ComplaintFocus | None = None,
 ) -> str:
     persona_basic = {
         "uuid": persona.get("uuid"),
@@ -341,7 +622,7 @@ def citizen_prompt(
     )
     provided_fields = [label for label, key in policy_fields if str(detail.get(key) or "").strip()]
     missing_fields = [label for label, key in policy_fields if not str(detail.get(key) or "").strip()]
-    focus_basis, focus_instruction = _complaint_focus(persona, policy)
+    focus = focus or _complaint_focus(persona, policy)
     output_contract = {
         "persona_summary": {
             "이름": persona_source_name(persona),
@@ -354,7 +635,7 @@ def citizen_prompt(
         "personality": "",
         "complaints": [
             {
-                "basis": focus_basis,
+                "basis": focus.basis,
                 "complaint_text": "",
                 "dialogue": "",
             }
@@ -413,9 +694,15 @@ def citizen_prompt(
 - 지역·나이 판정이 충족이면 그 사실을 인정하고, 전체 수급 여부는 다른 조건을 알 수 없다는 조건형 질문으로만 표현하세요.
 
 [이번 응답의 유일한 민원 쟁점 - 변경 금지]
-- basis: {focus_basis}
-- 초점: {focus_instruction}
+- 유형: {focus.kind}
+- basis: {focus.basis}
+- 정책 근거: {focus.policy_evidence}
+- 페르소나 근거: {focus.persona_evidence}
+- 질문 방향: {focus.question_seed}
+- 초점: {focus.instruction}
 - 위 쟁점으로 민원 1개만 작성하고, 다른 basis나 쟁점을 추가하지 마세요.
+- complaint_text와 dialogue 각각에 지정된 쟁점의 사실 근거와 문제 관계를 직접 넣으세요.
+- 정보 공백 유형이면 두 필드 각각에서 해당 항목과 안내·제공되지 않은 사실을 함께 명시하세요.
 
 [사실 근거 규칙]
 1. 감정과 평가는 주관적이어도 되지만, 사실 전제는 위 정책·페르소나·판정 블록에서 확인할 수 있어야 합니다.

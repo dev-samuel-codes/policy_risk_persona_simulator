@@ -4,8 +4,10 @@ from backend.ai_simulation_core.simulations.citizen_quality import (
     MATCHED,
     NOT_MATCHED,
     build_grounding_facts,
+    evaluate_region_status,
     validate_semantic_quality,
 )
+from backend.ai_simulation_core.region_matching import region_matches
 
 
 class CitizenQualityTest(unittest.TestCase):
@@ -73,6 +75,33 @@ class CitizenQualityTest(unittest.TestCase):
             [],
         )
 
+    def test_quality_and_candidate_region_matching_use_the_same_matrix(self) -> None:
+        cases = (
+            ({"province": "서울", "district": "서울-서초구"}, "서울", "서초구"),
+            ({"province": "서울", "district": "서초구"}, "서울", "서울-서초구"),
+            ({"province": "서울", "district": "서울-강남구"}, "서울", "서초구"),
+            ({"province": "서울", "district": "서울-강서구"}, "서울", "서구"),
+            ({"province": "부산", "district": "부산-중구"}, "서울", "서울-중구"),
+            ({"province": "서울", "district": ""}, "서울", "서초구"),
+        )
+        for persona, province, district in cases:
+            with self.subTest(persona=persona, district=district):
+                matches = region_matches(
+                    persona,
+                    region_scope="specific",
+                    province=province,
+                    district=district,
+                )
+                status = evaluate_region_status(
+                    persona,
+                    {
+                        "region_scope": "specific",
+                        "region_province": province,
+                        "region_district": district,
+                    },
+                )
+                self.assertEqual(status, MATCHED if matches else NOT_MATCHED)
+
     def test_eligible_persona_rejects_age_exclusion_claim(self) -> None:
         errors = self.errors_for(
             complaints=[
@@ -98,6 +127,169 @@ class CitizenQualityTest(unittest.TestCase):
         self.assertTrue(
             any(error.startswith("REGION_ELIGIBILITY") for error in errors)
         )
+
+    def test_policy_name_does_not_create_age_or_region_exclusion_cause(self) -> None:
+        for service_name in ("서울 청년 주거비 지원", "지역 청년 주거비 지원"):
+            with self.subTest(service_name=service_name):
+                policy = {
+                    **self.policy,
+                    "상세정보": {
+                        **self.policy["상세정보"],
+                        "서비스명": service_name,
+                    },
+                }
+                result = {
+                    **self.valid_result,
+                    "complaints": [
+                        {
+                            "basis": "제외조건",
+                            "complaint_text": (
+                                f"제외조건이 안내되지 않아 어떤 경우에 {service_name} "
+                                "대상에서 제외되는지 확인이 필요합니다."
+                            ),
+                            "dialogue": (
+                                f"{service_name}의 제외조건이 명시되지 않아 어떤 경우에 "
+                                "지원 대상에서 제외되는지 궁금합니다."
+                            ),
+                        }
+                    ],
+                }
+
+                errors = validate_semantic_quality(result, self.persona, policy)
+
+                self.assertFalse(
+                    any(error.startswith("AGE_ELIGIBILITY") for error in errors)
+                )
+                self.assertFalse(
+                    any(error.startswith("REGION_ELIGIBILITY") for error in errors)
+                )
+
+    def test_explicit_age_exclusion_causes_are_rejected(self) -> None:
+        sentences = (
+            "저는 청년이 아니라 지원 대상이 아니라고 합니다.",
+            "청년 기준 때문에 지원을 못 받습니다.",
+            "청년이라서 지원 대상에서 제외됩니다.",
+            "연령 요건을 충족하지 못해 지원 대상에서 제외됩니다.",
+            "연령 제한에 걸려 지원 대상에서 탈락했습니다.",
+            "나이가 맞지 않아 지원을 받을 수 없습니다.",
+            "청년 기준에서 벗어나 지원 대상이 되지 않습니다.",
+            "나이 때문에 지원 대상이 아닙니다.",
+            "나이 때문에 신청해도 지원 대상에서 제외됩니다.",
+            "나이 때문에 청년 주택 지원 대상에서 제외됩니다.",
+            "연령 기준 때문에 추가 지원 대상에서 제외됩니다.",
+            "연령 초과로 지원 대상에서 제외됩니다.",
+            "나이 상한을 초과해 지원 대상에서 제외됩니다.",
+            "나이가 기준에 미달해 지원 대상에서 제외됩니다.",
+            "나이 때문에 신청 자격이 없어 지원 대상에서 제외됩니다.",
+            "연령 때문에 접수조차 못 하고 지원 대상에서 제외됩니다.",
+            "지원 대상이 아닌 이유는 나이 기준 때문입니다.",
+            "나이 기준에는 맞지만 결국 나이 때문에 지원 대상에서 제외됩니다.",
+            "나이를 이유로 지원을 받지 못합니다.",
+            "연령 탓에 지원 대상에서 제외됩니다.",
+            "나이가 어려서 지원 대상에서 제외됩니다.",
+            "청년층이라는 이유로 지원 대상에서 제외됩니다.",
+            "25세라는 사실만으로 별도의 추가 심사 없이 지원 대상에서 제외됩니다.",
+        )
+        for sentence in sentences:
+            with self.subTest(sentence=sentence):
+                errors = self.errors_for(
+                    complaints=[
+                        {
+                            "basis": "지원대상",
+                            "complaint_text": sentence,
+                            "dialogue": sentence,
+                        }
+                    ]
+                )
+
+                self.assertTrue(
+                    any(error.startswith("AGE_ELIGIBILITY") for error in errors)
+                )
+
+    def test_explicit_region_exclusion_causes_are_rejected(self) -> None:
+        sentences = (
+            "서울 시민이라 지원 대상이 아니라고 합니다.",
+            "거주지가 정책에서 정한 범위와 일치하지 않는 조건 때문에 지원 대상에서 제외됩니다.",
+            "거주지 조건 때문에 대상자가 아닙니다.",
+            "거주지 조건 때문에 주택 지원 대상에서 제외됩니다.",
+            "서울 시민이라서 청년 주택 지원 대상에서 제외됩니다.",
+            "서울 거주 조건에 맞지 않아 지원 대상에서 제외됩니다.",
+            "서울 거주 요건을 충족하지 못해 지원 대상에서 제외됩니다.",
+            "서울에 살지 않아 지원 대상에서 제외됩니다.",
+            "주소지가 서울이 아니어서 지원 대상에서 제외됩니다.",
+            "거주지가 서울과 일치하지 않아 지원 대상에서 제외됩니다.",
+            "거주지 요건에서 벗어나 지원 대상에서 제외됩니다.",
+            "지역 제한에 걸려 지원 대상에서 제외됩니다.",
+            "거주지 조건으로 인해 지원 대상에서 제외됩니다.",
+            "추가 거주지 제한 때문에 지원 대상에서 제외됩니다.",
+            "지원 대상이 아닌 이유는 거주지 기준 때문입니다.",
+            "지역 기준에는 맞지만 결국 거주지 때문에 지원 대상에서 제외됩니다.",
+            "서울 관할이 아니라서 지원 대상에서 제외됩니다.",
+            "서울 소속이 아니어서 지원 대상에서 제외됩니다.",
+            "서울 관할 조건을 충족하지 못해 지원 대상에서 제외됩니다.",
+        )
+        for sentence in sentences:
+            with self.subTest(sentence=sentence):
+                errors = self.errors_for(
+                    complaints=[
+                        {
+                            "basis": "지원대상",
+                            "complaint_text": sentence,
+                            "dialogue": sentence,
+                        }
+                    ]
+                )
+
+                self.assertTrue(
+                    any(error.startswith("REGION_ELIGIBILITY") for error in errors)
+                )
+
+    def test_other_causes_do_not_become_age_or_region_contradictions(self) -> None:
+        sentences = (
+            "서울 청년 지원이라서 어떤 경우에 지원 대상에서 제외되는지 궁금합니다.",
+            "연령 기준상 대상이지만 재산 때문에 지원을 받지 못합니다.",
+            "25세라 신청했지만 소득 때문에 제외됐습니다.",
+            "서울이라서 신청했지만 소득 때문에 지원 대상에서 제외됩니다.",
+            "서울에서 거주하기 때문에 신청했고 서류 문제로 지원 대상에서 제외됐습니다.",
+            "서울에 거주하며 지역 요건도 충족하지만 소득 때문에 지원 대상에서 제외됩니다.",
+            "나이 때문이 아니라 소득 때문에 지원 대상에서 제외됩니다.",
+            "서울 거주지 때문이 아니라 재산 때문에 지원 대상에서 제외됩니다.",
+            "연령 조건을 충족하지 못한 것이 아니라 소득 때문에 지원 대상에서 제외됩니다.",
+            "거주지 조건을 충족하지 못한 것이 아니라 재산 때문에 지원 대상에서 제외됩니다.",
+            "나이가 맞지 않을까 걱정했지만 실제 연령은 충족하고 소득 때문에 지원 대상에서 제외됩니다.",
+            "나이 기준이 맞지 않는 게 아니라 취업 상태 때문에 지원 대상에서 제외됩니다.",
+            "지역 기준이 맞지 않는 게 아니라 취업 상태 때문에 지원 대상에서 제외됩니다.",
+            "나이가 다르지 않고 소득 때문에 지원 대상에서 제외됩니다.",
+            "지역이 다르지 않고 소득 때문에 지원 대상에서 제외됩니다.",
+            "나이 조건에 맞지 않는 것은 아니지만 소득 때문에 대상자가 아닙니다.",
+            "연령 요건을 충족하지 못했다는 설명은 틀렸고 재산 때문에 대상자가 아닙니다.",
+            "거주지 조건에 맞지 않는 것은 아니지만 소득 때문에 대상자가 아닙니다.",
+            "서울 주민이 아니라는 것은 사실이 아니지만 서류 때문에 대상자가 아닙니다.",
+            "나이가 다르지는 않고 지원 대상에서 제외된 이유는 소득입니다.",
+            "나이 기준에서 벗어나지는 않았고 지원 대상에서 제외된 이유는 재산입니다.",
+            "나이가 기준에 미달하지는 않았고 지원 대상에서 제외된 이유는 소득입니다.",
+            "나이가 상한을 초과하지는 않았고 지원 대상에서 제외된 이유는 재산입니다.",
+            "지역이 다르지는 않고 지원 대상에서 제외된 이유는 소득입니다.",
+            "거주지 범위를 벗어나지는 않았고 지원 대상에서 제외된 이유는 재산입니다.",
+        )
+        for sentence in sentences:
+            with self.subTest(sentence=sentence):
+                errors = self.errors_for(
+                    complaints=[
+                        {
+                            "basis": "제외조건",
+                            "complaint_text": sentence,
+                            "dialogue": sentence,
+                        }
+                    ]
+                )
+
+                self.assertFalse(
+                    any(error.startswith("AGE_ELIGIBILITY") for error in errors)
+                )
+                self.assertFalse(
+                    any(error.startswith("REGION_ELIGIBILITY") for error in errors)
+                )
 
     def test_blank_method_rejects_online_only_claim(self) -> None:
         errors = self.errors_for(
@@ -409,6 +601,36 @@ class CitizenQualityTest(unittest.TestCase):
         )
 
         self.assertTrue(
+            any(error.startswith("UNSUPPORTED_CURRENT_OUTCOME") for error in errors)
+        )
+
+    def test_structured_region_mismatch_may_explain_current_exclusion(self) -> None:
+        persona = {
+            **self.persona,
+            "province": "부산",
+            "district": "부산-해운대구",
+        }
+        result = {
+            **self.valid_result,
+            "grounding": build_grounding_facts(persona, self.policy),
+            "complaints": [
+                {
+                    "basis": "지원대상",
+                    "complaint_text": (
+                        "정책 지역은 서울이고 현재 거주지는 부산이라 "
+                        "지원 대상에서 제외됩니다."
+                    ),
+                    "dialogue": (
+                        "정책이 서울에만 적용되어 부산 거주자는 "
+                        "지원 대상에서 제외됩니다."
+                    ),
+                }
+            ],
+        }
+
+        errors = validate_semantic_quality(result, persona, self.policy)
+
+        self.assertFalse(
             any(error.startswith("UNSUPPORTED_CURRENT_OUTCOME") for error in errors)
         )
 
@@ -1027,18 +1249,58 @@ class CitizenQualityTest(unittest.TestCase):
         self.assertEqual(validate_semantic_quality(result, self.persona, policy), [])
 
     def test_other_condition_uncertainty_is_not_age_contradiction(self) -> None:
-        result = {
-            **self.valid_result,
-            "complaints": [
-                {
-                    "basis": "정보미제공",
-                    "complaint_text": "나이 기준은 충족하지만 소득 기준이 있는지 알 수 없습니다.",
-                    "dialogue": "나이는 맞아도 다른 기준으로 탈락할까 걱정돼요.",
+        sentences = (
+            "나이 기준은 충족하지만 소득 기준이 있는지 알 수 없습니다.",
+            "나이 기준에는 맞지만 소득 조건 때문에 지원 대상에서 제외되는지 궁금합니다.",
+            "연령 기준에 해당하지만 추가 선정 기준 때문에 지원 대상에서 제외되는지 궁금합니다.",
+            "연령 제한에는 문제가 없지만 다른 제외조건 때문에 지원 대상에서 제외되는지 궁금합니다.",
+        )
+        for sentence in sentences:
+            with self.subTest(sentence=sentence):
+                result = {
+                    **self.valid_result,
+                    "complaints": [
+                        {
+                            "basis": "정보미제공",
+                            "complaint_text": sentence,
+                            "dialogue": sentence,
+                        }
+                    ],
                 }
-            ],
-        }
-        errors = validate_semantic_quality(result, self.persona, self.policy)
-        self.assertFalse(any(error.startswith("AGE_ELIGIBILITY") for error in errors))
+                errors = validate_semantic_quality(
+                    result,
+                    self.persona,
+                    self.policy,
+                )
+                self.assertFalse(
+                    any(error.startswith("AGE_ELIGIBILITY") for error in errors)
+                )
+
+    def test_other_condition_uncertainty_is_not_region_contradiction(self) -> None:
+        sentences = (
+            "서울 거주 조건은 충족하지만 다른 제외조건 때문에 지원 대상에서 제외되는지 궁금합니다.",
+            "지역 조건을 충족하지만 추가 기준 때문에 지원 대상에서 제외되는지 궁금합니다.",
+            "지역 조건에는 맞지만 소득 조건 때문에 지원 대상에서 제외되는지 궁금합니다.",
+            "서울 거주자로 지역 기준에는 맞지만 다른 제외조건 때문에 지원 대상에서 제외되는지 궁금합니다.",
+        )
+        for sentence in sentences:
+            with self.subTest(sentence=sentence):
+                result = {
+                    **self.valid_result,
+                    "complaints": [
+                        {
+                            "basis": "제외조건",
+                            "complaint_text": sentence,
+                            "dialogue": sentence,
+                        }
+                    ],
+                }
+
+                errors = validate_semantic_quality(result, self.persona, self.policy)
+
+                self.assertFalse(
+                    any(error.startswith("REGION_ELIGIBILITY") for error in errors)
+                )
 
     def test_duplicate_complaints_are_rejected(self) -> None:
         complaint = self.valid_result["complaints"][0]

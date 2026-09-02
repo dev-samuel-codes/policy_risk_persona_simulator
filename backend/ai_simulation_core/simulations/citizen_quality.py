@@ -10,6 +10,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from backend.ai_simulation_core.region_matching import region_matches
+
 
 MATCHED = "충족"
 NOT_MATCHED = "불충족"
@@ -34,11 +36,11 @@ _UNCERTAINTY_PATTERN = re.compile(
     r"인지 궁금|일까 걱정|될까 걱정|가능성|라면|이라면|경우"
 )
 _EXCLUSION_PATTERN = re.compile(
-    r"지원\s*대상(?:에서)?\s*(?:제외|탈락)|"
-    r"지원\s*대상(?:이|은)?\s*(?:아니|되지 않)|"
-    r"대상(?:이|은)?\s*(?:아니|되지 않)|"
+    r"지원\s*대상(?:자)?(?:에서)?\s*(?:제외|탈락)|"
+    r"지원\s*대상(?:자)?(?:이|은|자가|자는)?\s*(?:아닌|아니|아닙|되지 않)|"
+    r"대상(?:자)?(?:이|은|자가|자는)?\s*(?:아닌|아니|아닙|되지 않)|"
     r"지원(?:이|을|금)?\s*(?:받을 수 없|받지 못|못 받|안 되|되지 않|불가)|"
-    r"청년(?:이|은)?\s*(?:아니|되지 않)|"
+    r"청년(?:이|은)?\s*(?:아니|아닙|되지 않)|"
     r"(?:제외|탈락)(?:되|됐|한)"
 )
 _EXCLUSION_NEGATION_PATTERN = re.compile(
@@ -46,8 +48,62 @@ _EXCLUSION_NEGATION_PATTERN = re.compile(
     r"탈락(?:하는|한)? (?:것|건)은? 아니|"
     r"대상이 아닌 (?:것|건)은? 아니"
 )
-_OTHER_CONDITION_PATTERN = re.compile(
-    r"다른|추가|소득|재산|서류|주택|무주택|선정|제외조건|가구|예산"
+_CAUSAL_BRIDGE_BREAK_PATTERN = re.compile(
+    r"아니라|지만|으나|반면|대신|그러나|그런데"
+)
+_ALTERNATE_CAUSE_PATTERN = re.compile(
+    r"(?:다른|추가|소득|재산|서류|주택|무주택|선정|제외조건|가구|예산|취업)"
+    r"(?:\s*(?:조건|기준|요건|문제|사유|상태))?.{0,8}"
+    r"(?:때문|탓|문제(?:로|라서)?|사유|원인|(?:으)?로\s*인해)"
+)
+_AGE_MISMATCH_PATTERN = re.compile(
+    r"(?:나이|연령)(?:가|는|이|은|도|을|를)?\s*"
+    r"(?:(?:조건|기준|요건|제한|범위|상한|하한)"
+    r"(?:은|는|이|가|을|를|에|에서|상)?\s*)?"
+    r"(?:불충족|충족하지 못|맞지 않|해당하지 않|"
+    r"다르(?!지(?:는)?\s*않)|아니|아닙|벗어나(?!지(?:는)?\s*않)|"
+    r"미달(?!하지(?:는)?\s*않)|초과(?!하지(?:는)?\s*않)|"
+    r"범위\s*밖|제한에\s*걸려)|"
+    r"청년(?:이|은|도)?\s*(?:아니|아닙|되지 않)|"
+    r"청년\s*(?:기준|조건|요건|연령|나이)"
+    r"(?:에서|에|은|는|이|가|을|를|상)?\s*"
+    r"(?:불충족|충족하지 못|맞지 않|해당하지 않|"
+    r"벗어나(?!지(?:는)?\s*않)|미달(?!하지(?:는)?\s*않)|"
+    r"초과(?!하지(?:는)?\s*않))"
+)
+_AGE_DIRECT_CAUSE_PATTERN = re.compile(
+    r"(?:나이|연령)(?:가|는|이|은|도|를|을)?"
+    r"(?:\s*(?:조건|기준|요건|제한|범위|상한|하한)"
+    r"(?:이|가|은|는|을|를|에|에서|상)?)?\s*"
+    r"(?:때문(?:에)?|탓(?:에)?|이유로|(?:으)?로\s*인해)|"
+    r"(?:나이|연령)(?:가|는|이|은)?\s*(?:어려서|많아서)|"
+    r"청년\s*(?:기준|조건|요건|연령|나이)\s*"
+    r"(?:때문(?:에)?|탓(?:에)?|이유로|(?:으)?로\s*인해)|"
+    r"청년(?:층)?(?:이라서|이라는\s*이유로|이기\s*때문(?:에)?)"
+)
+_REGION_MISMATCH_PATTERN = re.compile(
+    r"(?:지역|거주지|주소지|관할(?:지역)?)(?:가|는|이|은|도|을|를)?\s*"
+    r"(?:(?:조건|기준|요건|제한|범위)"
+    r"(?:은|는|이|가|을|를|에|에서|상)?\s*)?"
+    r"(?:불충족|충족하지 못|맞지 않|해당하지 않|"
+    r"다르(?!지(?:는)?\s*않)|아니|아닙|벗어나(?!지(?:는)?\s*않)|"
+    r"범위\s*밖|제한에\s*걸려)|"
+    r"(?:지역|거주지|주소지|관할(?:지역)?).{0,24}"
+    r"(?:일치하지 않|범위.{0,8}(?:맞지 않|"
+    r"벗어나(?!지(?:는)?\s*않)|밖))"
+)
+_REGION_DIRECT_CAUSE_PATTERN = re.compile(
+    r"(?:지역|거주지|주소지|관할(?:지역)?)"
+    r"(?:\s*(?:조건|기준|요건|제한|범위))?\s*"
+    r"(?:때문|탓|문제로|(?:으)?로\s*인해)"
+)
+_CAUSE_NEGATION_SUFFIX_PATTERN = re.compile(
+    r"^\s*(?:이\s*)?아니라|"
+    r"^\s*.{0,18}(?:것|게|점|설명|사실)"
+    r"(?:이|가|은|는)?\s*(?:아니|틀렸)"
+)
+_REVERSE_CAUSE_BRIDGE_PATTERN = re.compile(
+    r"^(?:.{0,24})(?:이유|원인|사유)(?:은|는|이|가)?\s*$"
 )
 _CHANNEL_PATTERN = re.compile(
     r"온라인|인터넷|누리집|홈페이지|모바일|애플리케이션|앱|웹|"
@@ -462,18 +518,20 @@ def evaluate_region_status(persona: dict, policy: dict) -> str:
     if scope != "specific":
         return UNKNOWN
 
-    policy_province = _normalize(policy.get("region_province"))
-    policy_district = _normalize(policy.get("region_district"))
-    persona_province = _normalize(persona.get("province"))
-    persona_district = _normalize(persona.get("district"))
-
+    policy_province = _text(policy.get("region_province"))
+    persona_province = _text(persona.get("province"))
     if not policy_province or not persona_province:
         return UNKNOWN
-    if policy_province != persona_province and policy_province not in persona_district:
-        return NOT_MATCHED
-    if policy_district and policy_district not in persona_district:
-        return NOT_MATCHED
-    return MATCHED
+    return (
+        MATCHED
+        if region_matches(
+            persona,
+            region_scope=scope,
+            province=policy_province,
+            district=_text(policy.get("region_district")),
+        )
+        else NOT_MATCHED
+    )
 
 
 def evaluate_age_status(persona: dict, policy: dict) -> str:
@@ -798,6 +856,34 @@ def _validate_document_identity(result: dict, policy: dict) -> list[str]:
     return errors
 
 
+def _directly_causes_exclusion(
+    sentence: str,
+    cause_patterns: tuple[re.Pattern[str], ...],
+) -> bool:
+    outcomes = list(_EXCLUSION_PATTERN.finditer(sentence))
+    for pattern in cause_patterns:
+        for cause in pattern.finditer(sentence):
+            if _CAUSE_NEGATION_SUFFIX_PATTERN.search(
+                sentence[cause.end() : cause.end() + 24]
+            ):
+                continue
+            for outcome in outcomes:
+                if outcome.start() >= cause.end():
+                    bridge = sentence[cause.end() : outcome.start()]
+                    if len(bridge) > 48:
+                        continue
+                    if _CAUSAL_BRIDGE_BREAK_PATTERN.search(
+                        bridge
+                    ) or _ALTERNATE_CAUSE_PATTERN.search(bridge):
+                        continue
+                    return True
+                if outcome.end() <= cause.start():
+                    bridge = sentence[outcome.end() : cause.start()]
+                    if _REVERSE_CAUSE_BRIDGE_PATTERN.search(bridge):
+                        return True
+    return False
+
+
 def _validate_structured_eligibility(
     entries: list[tuple[str, str]],
     persona: dict,
@@ -811,36 +897,80 @@ def _validate_structured_eligibility(
     for path, sentence in _sentences(entries):
         if _EXCLUSION_NEGATION_PATTERN.search(sentence):
             continue
-        claims_exclusion = bool(_EXCLUSION_PATTERN.search(sentence))
-        if not claims_exclusion:
+        if not _EXCLUSION_PATTERN.search(sentence):
             continue
 
         if facts["age_status"] == MATCHED:
-            age_anchor = bool(
-                re.search(r"나이|연령|청년", sentence)
-                or (age and re.search(rf"(?<!\d){re.escape(age)}\s*(?:세|살)", sentence))
-            )
-            allows_other_condition = bool(
-                re.search(r"(?:나이|연령).{0,20}충족", sentence)
-                and _OTHER_CONDITION_PATTERN.search(sentence)
-            )
-            if age_anchor and not allows_other_condition:
+            age_cause_patterns = [
+                _AGE_MISMATCH_PATTERN,
+                _AGE_DIRECT_CAUSE_PATTERN,
+            ]
+            if age:
+                age_cause_patterns.append(
+                    re.compile(
+                        rf"(?<!\d){re.escape(age)}\s*(?:세|살)\s*"
+                        r"(?:가\s*되면|라(?:서)?|여서|이어서|때문에|"
+                        r"라는\s*사실만으로)"
+                    )
+                )
+            if _directly_causes_exclusion(
+                sentence,
+                tuple(age_cause_patterns),
+            ):
                 errors.append(f"AGE_ELIGIBILITY_CONTRADICTION:{path}")
 
         if facts["region_status"] == MATCHED:
-            region_anchor = bool(
-                re.search(r"지역|거주지", sentence)
-                or (province and province in sentence)
-            )
-            region_cause = bool(
-                re.search(
-                    r"(?:지역|거주지|"
-                    + re.escape(province)
-                    + r").{0,30}(?:때문|조건|아니)",
-                    sentence,
+            region_cause_patterns = [
+                _REGION_MISMATCH_PATTERN,
+                _REGION_DIRECT_CAUSE_PATTERN,
+            ]
+            if province:
+                escaped_province = re.escape(province)
+                province_identity = re.compile(
+                    escaped_province
+                    + r"\s*(?:시민|도민|주민|거주자|사람)\s*(?:이)?라(?:서)?"
                 )
-            )
-            if region_anchor and region_cause:
+                province_residence = re.compile(
+                    escaped_province
+                    + r"(?:에|에서)?\s*(?:살|거주)\S{0,8}\s*"
+                    r"(?:때문|라서|여서|이어서)"
+                )
+                province_mismatch = re.compile(
+                    escaped_province
+                    + r"\s*(?:시민|도민|주민|거주자|사람|관할|소속)"
+                    r"(?:이|은|가|는)?\s*(?:아니|아닙|되지 않)"
+                )
+                province_condition_mismatch = re.compile(
+                    escaped_province
+                    + r"\s*(?:(?:거주|지역|관할)\s*)?"
+                    r"(?:조건|기준|요건|제한)"
+                    r"(?:은|는|이|가|을|를|에|에서|상)?\s*"
+                    r"(?:불충족|충족하지 못|맞지 않|해당하지 않|"
+                    r"벗어나(?!지(?:는)?\s*않)|제한에\s*걸려)"
+                )
+                province_residence_mismatch = re.compile(
+                    escaped_province
+                    + r"(?:에|에서)?\s*(?:살지\s*않|거주하지\s*않)"
+                )
+                province_address_mismatch = re.compile(
+                    r"(?:거주지|주소지)(?:가|는|이|은)?\s*"
+                    + escaped_province
+                    + r"(?:이|가)?\s*(?:아닌|아니|아닙)"
+                )
+                region_cause_patterns.extend(
+                    (
+                        province_identity,
+                        province_residence,
+                        province_mismatch,
+                        province_condition_mismatch,
+                        province_residence_mismatch,
+                        province_address_mismatch,
+                    )
+                )
+            if _directly_causes_exclusion(
+                sentence,
+                tuple(region_cause_patterns),
+            ):
                 errors.append(f"REGION_ELIGIBILITY_CONTRADICTION:{path}")
     return errors
 
@@ -852,6 +982,7 @@ def _validate_policy_facts(
 ) -> list[str]:
     errors = []
     detail = _policy_detail(policy)
+    structured_status = build_grounding_facts(persona, policy)["structured_status"]
     application_method = _text(detail.get("신청방법"))
     application_period = _text(detail.get("신청기한"))
     required_documents = _text(detail.get("구비서류"))
@@ -876,7 +1007,10 @@ def _validate_policy_facts(
         if required_documents and _GENERIC_DOCUMENT_UNKNOWN_PATTERN.search(sentence):
             errors.append(f"CONTRADICTED_POLICY_FACT:구비서류:{path}")
 
-        if _CURRENT_DENIAL_PATTERN.search(sentence):
+        if (
+            _CURRENT_DENIAL_PATTERN.search(sentence)
+            and structured_status != NOT_MATCHED
+        ):
             errors.append(f"UNSUPPORTED_CURRENT_OUTCOME:{path}")
 
         if _PERSONAL_PREPARATION_STATE_PATTERN.search(sentence):
